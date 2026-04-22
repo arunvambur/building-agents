@@ -7,11 +7,21 @@ class PluginRegistry:
         self.agents = {}
         self.tools = {}
 
-    def register_agent(self, agent: AgentPlugin):
-        self.agents[agent.name] = agent
+    def register_agent(self, plugin):
+        plugin.initialize()
+        self.agents[plugin.name] = plugin
 
-    def register_tools(self, tool_plugin: ToolPlugin):
-        self.tools[tool_plugin.name] = tool_plugin.get_tools()
+    def register_tools(self, plugin):
+        plugin.initialize()
+        self.tools[plugin.name] = plugin
 
-    def get_tools_for_agent(self, agent_name):
-        return self.tools.get(agent_name, [])
+    def get_tools(self, name):
+        plugin = self.tools.get(name)
+        return plugin.get_tools() if plugin else []
+
+    def shutdown(self):
+        for p in self.agents.values():
+            p.shutdown()
+
+        for p in self.tools.values():
+            p.shutdown()

@@ -10,7 +10,7 @@ from runtime.core.interfaces import AgentPlugin
 class BookingAgentPlugin(AgentPlugin):
     name = "accommodation_booking_agent"
 
-    def build_graph(self, llm, tools):
+    def build_graph(self, llm, tools, checkpointer=None):
         llm_with_tools = llm.bind_tools(tools)
 
         def llm_node(state):

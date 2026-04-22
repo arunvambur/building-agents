@@ -6,4 +6,9 @@ load_dotenv()
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 def get_llm():
-    return ChatOpenAI(openai_api_key=openai_api_key, model_name="gpt-5-nano")
+    return ChatOpenAI(
+        openai_api_key=openai_api_key, 
+        model_name="gpt-5-nano",
+        use_responses_api=True,
+        use_previous_response_id=True
+        )

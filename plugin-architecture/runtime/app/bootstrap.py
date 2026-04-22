@@ -10,6 +10,8 @@ from runtime.router.router import LLMRouter
 from runtime.router.schema import AgentTypeOutput
 from runtime.tools.booking_tool import BookingTools
 from runtime.tools.travel_tool import TravelTools
+from runtime.memory.checkpoint import build_checkpointer
+from runtime.guardrails.travel_guardrail import TravelGuardrailPlugin
 
 
 def build_runtime():
@@ -24,13 +26,16 @@ def build_runtime():
     registry.register_tools(TravelTools())
     registry.register_tools(BookingTools())
 
-    router = LLMRouter(
-        llm,
-        AgentTypeOutput
-    )
+    router = LLMRouter(llm)
+
+    guardrail = TravelGuardrailPlugin(llm)
+
+    checkpointer = build_checkpointer()
 
     return AgentRuntime(
         registry,
         llm,
-        router
+        router,
+        guardrail=guardrail,
+        checkpointer=checkpointer
     )
