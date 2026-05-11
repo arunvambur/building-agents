@@ -22,10 +22,30 @@ npm --version
 
 ### Environment variables
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` and fill in your values:
 
 ```bash
+cp .env.example .env
+```
+
+**Using OpenAI (default):**
+```bash
+LLM_PROVIDER=openai
 OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4o-mini
+```
+
+**Using a local model via Ollama:**
+```bash
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=gemma3
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Make sure Ollama is running and the model is pulled before starting:
+```bash
+ollama pull gemma3
+ollama serve
 ```
 
 ---
@@ -34,26 +54,27 @@ OPENAI_API_KEY=your_key_here
 
 ```
 viz-agent/
+├── .env.example                         Environment variable reference
 ├── data/
 │   └── hotel_db/
-│       └── cornwall_hotels.db       SQLite hotel database
+│       └── cornwall_hotels.db           SQLite hotel database
 ├── src/
 │   ├── agents/
-│   │   ├── data_agent/              Queries structured data via tools
-│   │   ├── viz_agent/               Builds and renders visualizations
-│   │   └── supervisor/              LangGraph supervisor — sequences agents
+│   │   ├── data_agent/                  Queries structured data via tools
+│   │   ├── viz_agent/                   Builds and renders visualizations
+│   │   └── supervisor/                  LangGraph supervisor — sequences agents
 │   ├── app/
-│   │   ├── api/                     FastAPI application
-│   │   ├── cli/                     Interactive terminal chat
-│   │   └── bootstrap.py             Wires runtime, registry, renderers
+│   │   ├── api/                         FastAPI application
+│   │   ├── cli/                         Interactive terminal chat
+│   │   └── bootstrap.py                 Wires runtime, registry, renderers
 │   ├── core/
-│   │   ├── dsl/                     VisualizationSpec schema + validator
-│   │   ├── plugin/                  Interfaces, registry, runtime, guardrail
-│   │   └── renderer/                Renderer base, registry, Excel, Tableau
-│   ├── infra/                       LLM model, checkpointer
-│   └── tools/                       QueryTools (SQLite), RenderingTools
-├── chat/                            Next.js chat UI
-└── tests/                           pytest test suite
+│   │   ├── dsl/                         VisualizationSpec schema + validator
+│   │   ├── plugin/                      Interfaces, registry, runtime, guardrail
+│   │   └── renderer/                    Renderer base, registry, Excel, Tableau
+│   ├── infra/                           LLM provider factory, checkpointer
+│   └── tools/                           QueryTools (SQLite), RenderingTools
+├── chat/                                Next.js chat UI
+└── tests/                               pytest test suite
 ```
 
 ---
