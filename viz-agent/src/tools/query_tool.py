@@ -1,10 +1,16 @@
-
 from core.plugin.interfaces import ToolPlugin
 
 
 class QueryTools(ToolPlugin):
-    name = "data_intelligent_query_agent"
+    """
+    Tool plugin for the data_agent.
+    Provides tools for querying and filtering structured data sources.
+    """
 
-    def get_tools(self):
-        #hotel_db_toolkit_tools = get_hotel_info_store().get_tools()
-        return [] # hotel_db_toolkit_tools + [check_bnb_availability]
+    name = "query_tools"
+
+    def get_tools(self) -> list:
+        # TODO: register LangChain @tool functions here, e.g.:
+        # from tools.query_functions import fetch_dataset, filter_records
+        # return [fetch_dataset, filter_records]
+        return []

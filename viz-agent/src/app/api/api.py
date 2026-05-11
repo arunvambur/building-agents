@@ -1,32 +1,12 @@
 from fastapi import FastAPI
-import uuid
-from langchain_core.messages import HumanMessage
+
+from app.api.routes import health
+from app.api.routes.visualize import register as register_visualize
 from app.bootstrap import build_runtime
 
-
-app = FastAPI()
+app = FastAPI(title="Viz Agent API", version="0.1.0")
 
 runtime = build_runtime()
 
-thread_id = str(uuid.uuid4())
-
-config = {
-    "configurable": {
-        "thread_id": thread_id
-    }
-}
-
-
-@app.post("/visualize")
-async def visualize(user_input: str):
-
-    state = {
-            "messages": [
-                HumanMessage(content=user_input)
-            ]
-        }
-
-    result = runtime.invoke(state)
-
-
-    return result["messages"][-1].content
+app.include_router(health.router)
+app.include_router(register_visualize(runtime))

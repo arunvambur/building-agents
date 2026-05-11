@@ -1,33 +1,47 @@
-class AgentPlugin:
+from abc import ABC, abstractmethod
+from typing import Any, Optional, Tuple
+
+
+class AgentPlugin(ABC):
     name: str
 
-    def build_graph(self, llm):
-        pass
-    
-    def initialize(self):
+    @abstractmethod
+    def build_graph(self, llm: Any, tools: list, checkpointer: Optional[Any] = None) -> Any:
+        """Build and return a compiled LangGraph graph."""
+
+    def initialize(self) -> None:
         pass
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-class RouterPlugin:
-    def route(self, state) -> str:
-        pass
-    
-class ToolPlugin:
+
+class RouterPlugin(ABC):
+
+    @abstractmethod
+    def route(self, state: dict) -> str:
+        """Return the name of the agent that should handle this state."""
+
+
+class ToolPlugin(ABC):
     name: str
 
-    def get_tools(self):
-        """Return list of LangChain tools"""
-        return []
-    
-    def initialize(self):
+    @abstractmethod
+    def get_tools(self) -> list:
+        """Return a list of LangChain tools."""
+
+    def initialize(self) -> None:
         pass
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-class GuardrailPlugin:
-    def validate(self, state):
-        pass
-    
+
+class GuardrailPlugin(ABC):
+
+    @abstractmethod
+    def validate(self, state: dict) -> Tuple[bool, Optional[Any]]:
+        """
+        Validate the incoming state.
+        Returns (True, None) if allowed, (False, AIMessage) if blocked.
+        """

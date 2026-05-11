@@ -1,9 +1,13 @@
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
 import os
 
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
+
 
 def get_llm():
-    return ChatOpenAI(openai_api_key=openai_api_key, model_name="gpt-5-nano")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("OPENAI_API_KEY is not set in environment or .env file.")
+    return ChatOpenAI(api_key=api_key, model="gpt-4o-mini")

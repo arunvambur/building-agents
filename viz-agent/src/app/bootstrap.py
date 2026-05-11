@@ -1,38 +1,64 @@
-
 from agents.data_agent.plugin import DataAgentPlugin
+from agents.supervisor.graph import build_supervisor_graph
 from agents.viz_agent.plugin import VizAgentPlugin
-from context.checkpoint import build_checkpointer
+from core.plugin.guardrail import VizGuardrailPlugin
 from core.plugin.registry import PluginRegistry
 from core.plugin.runtime import AgentRuntime
+from core.renderer.registry import RendererRegistry
+from core.renderer.tableau.tableau import TableauRenderer
+from infra.checkpointer import build_checkpointer
 from infra.llm_models import get_llm
-from router.router import LLMRouter
 from tools.query_tool import QueryTools
 from tools.rendering_tool import RenderingTools
-from guard.viz_guardrail import VizGuardrailPlugin
 
 
-def build_runtime():
+def build_runtime() -> AgentRuntime:
 
     llm = get_llm()
-
-    registry = PluginRegistry()
-
-    registry.register_agent(DataAgentPlugin())
-    registry.register_agent(VizAgentPlugin())
-
-    registry.register_tools(QueryTools())
-    registry.register_tools(RenderingTools())
-
-    router = LLMRouter(llm)
-
-    guardrail = VizGuardrailPlugin(llm)
-
     checkpointer = build_checkpointer()
 
-    return AgentRuntime(
-        registry,
+    # --- Renderer registry ---
+    renderer_registry = RendererRegistry()
+    renderer_registry.register(TableauRenderer())
+
+    # --- Plugin registry ---
+    registry = PluginRegistry()
+
+    registry.register_agent(
+        DataAgentPlugin(),
+        tool_plugins=[QueryTools()],
+    )
+    registry.register_agent(
+        VizAgentPlugin(),
+        tool_plugins=[RenderingTools(renderer_registry)],
+    )
+
+    # --- Build sub-agent graphs ---
+    data_agent_graph = registry.get_agent("data_agent").build_graph(
         llm,
-        router,
+        registry.get_tools("data_agent"),
+    )
+    viz_agent_graph = registry.get_agent("viz_agent").build_graph(
+        llm,
+        registry.get_tools("viz_agent"),
+    )
+
+    # --- Supervisor graph (sequences data_agent → viz_agent) ---
+    supervisor_graph = build_supervisor_graph(
+        llm,
+        data_agent_graph,
+        viz_agent_graph,
+        checkpointer=checkpointer,
+    )
+
+    # --- Guardrail ---
+    guardrail = VizGuardrailPlugin(llm)
+
+    return AgentRuntime(
+        registry=registry,
+        llm=llm,
+        router=None,
         guardrail=guardrail,
-        checkpointer=checkpointer
+        checkpointer=checkpointer,
+        supervisor=supervisor_graph,
     )

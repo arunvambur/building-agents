@@ -1,37 +1,35 @@
 import uuid
 
 from langchain_core.messages import HumanMessage
-from app.bootstrap import build_runtime
 
+from app.bootstrap import build_runtime
 
 
 runtime = build_runtime()
 
 thread_id = str(uuid.uuid4())
 
-config = {
-    "configurable": {
-        "thread_id": thread_id
-    }
-}
+config = {"configurable": {"thread_id": thread_id}}
 
 
 def chat():
+    print("Viz Agent ready. Type 'exit' to quit.")
 
     while True:
-        user = input("You: ")
+        user = input("You: ").strip()
 
-        state = {
-            "messages": [
-                HumanMessage(content=user)
-            ]
-        }
+        if not user:
+            continue
 
-        result = runtime.invoke(state)
+        if user.lower() == "exit":
+            break
 
-        print(
-            result["messages"][-1].content
-        )
+        state = {"messages": [HumanMessage(content=user)]}
+
+        result = runtime.invoke(state, config=config)
+
+        print(f"Agent: {result['messages'][-1].content}")
+
 
 if __name__ == "__main__":
     chat()

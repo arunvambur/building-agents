@@ -1,36 +1,51 @@
+from typing import Any, Optional
 
+from core.plugin.interfaces import GuardrailPlugin
+from core.plugin.registry import PluginRegistry
 
 
 class AgentRuntime:
+    """
+    Orchestrates guardrail validation and supervisor graph invocation.
+    The supervisor graph handles all routing and agent sequencing internally.
+    Supports both sync (invoke) and async (ainvoke) execution.
+    """
 
-    def __init__(self, registry, llm, router, guardrail=None, checkpointer=None):
+    def __init__(
+        self,
+        registry: PluginRegistry,
+        llm: Any,
+        supervisor: Any,
+        guardrail: Optional[GuardrailPlugin] = None,
+        checkpointer: Optional[Any] = None,
+        router: Optional[Any] = None,  # retained for interface compatibility, unused
+    ):
         self.registry = registry
         self.llm = llm
-        self.router = router
+        self.supervisor = supervisor
         self.guardrail = guardrail
         self.checkpointer = checkpointer
-        self.compiled_agents = {}
 
-    def get_agent(self, name):
-        if name not in self.compiled_agents:
-            plugin = self.registry.agents[name]
-            tools = self.registry.get_tools(name)
+    def _check_guardrail(self, state: dict) -> Optional[dict]:
+        """Returns a blocked response dict if guardrail rejects, else None."""
+        if not self.guardrail:
+            return None
+        allowed, message = self.guardrail.validate(state)
+        if not allowed:
+            return {"messages": [message]}
+        return None
 
-            self.compiled_agents[name] = plugin.build_graph(
-                self.llm,
-                tools,
-                self.checkpointer
-            )
+    def invoke(self, state: dict, config: Optional[dict] = None) -> dict:
+        blocked = self._check_guardrail(state)
+        if blocked:
+            return blocked
+        return self.supervisor.invoke(state, config=config)
 
-        return self.compiled_agents[name]
+    async def ainvoke(self, state: dict, config: Optional[dict] = None) -> dict:
+        blocked = self._check_guardrail(state)
+        if blocked:
+            return blocked
+        return await self.supervisor.ainvoke(state, config=config)
 
-    def invoke(self, state, config=None):
-
-        if self.guardrail:
-            allowed, msg = self.guardrail.validate(state)
-            if not allowed:
-                return {"messages": [{"content": msg}]}
-
-        agent_name = self.router.route(state)
-        agent = self.get_agent(agent_name)
-        return agent.invoke(state, config=config)
+    def shutdown(self) -> None:
+        self.registry.shutdown()
