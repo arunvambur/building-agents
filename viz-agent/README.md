@@ -1,43 +1,28 @@
-# Agent Runtime – Running CLI and API
+# Viz Agent
 
-This document explains how to run the **plugin-based agent runtime** in two modes:
-
-1. CLI mode (interactive terminal chat)
-2. API mode (FastAPI service)
+A plugin-based multi-agent runtime built on LangGraph for data visualization and processing,
+with a Next.js chat UI.
 
 ---
 
-# Prerequisites
+## Prerequisites
 
-### 1. Python Version
-
-Use Python **3.10+**
+### Python 3.10+
 
 ```bash
 python --version
 ```
 
----
-
-### 2. Install dependencies
-
-If using editable install:
+### Node.js 18+
 
 ```bash
-pip install -e .
+node --version
+npm --version
 ```
 
-Or install manually:
+### Environment variables
 
-```bash
-pip install langgraph langchain langchain-openai chromadb fastapi uvicorn python-dotenv pydantic
-```
-
----
-
-### 3. Environment variables
-
-Create a `.env` file in project root:
+Create a `.env` file in the project root:
 
 ```bash
 OPENAI_API_KEY=your_key_here
@@ -45,78 +30,116 @@ OPENAI_API_KEY=your_key_here
 
 ---
 
-# Running CLI Mode
+## Project Structure
 
-CLI mode is useful for:
-
-• local testing
-• debugging agents
-• experimenting with prompts
-• validating tool execution
+```
+viz-agent/
+├── data/
+│   └── hotel_db/
+│       └── cornwall_hotels.db       SQLite hotel database
+├── src/
+│   ├── agents/
+│   │   ├── data_agent/              Queries structured data via tools
+│   │   ├── viz_agent/               Builds and renders visualizations
+│   │   └── supervisor/              LangGraph supervisor — sequences agents
+│   ├── app/
+│   │   ├── api/                     FastAPI application
+│   │   ├── cli/                     Interactive terminal chat
+│   │   └── bootstrap.py             Wires runtime, registry, renderers
+│   ├── core/
+│   │   ├── dsl/                     VisualizationSpec schema + validator
+│   │   ├── plugin/                  Interfaces, registry, runtime, guardrail
+│   │   └── renderer/                Renderer base, registry, Excel, Tableau
+│   ├── infra/                       LLM model, checkpointer
+│   └── tools/                       QueryTools (SQLite), RenderingTools
+├── chat/                            Next.js chat UI
+└── tests/                           pytest test suite
+```
 
 ---
 
-### Start CLI
+## Install Python Dependencies
+
+From the project root:
 
 ```bash
-python -m agent_runtime.app.cli
+pip install -e .
 ```
 
 ---
 
-### Example session
+## Running the Backend API
 
-```text
-You: tell me about Cornwall
-Assistant: Cornwall is a historic county...
-
-You: find BnB in St Ives for 2 rooms
-Assistant: Here are available BnBs...
-```
-
----
-
-### CLI execution flow
-
-```text
-User input
-   ↓
-Router plugin
-   ↓
-Selected agent plugin
-   ↓
-Tools executed (if needed)
-   ↓
-Response returned
-```
-
----
-
-# Running API Mode
-
-API mode exposes the runtime as an HTTP service using FastAPI.
-
----
-
-### Start API server
+The FastAPI backend must be started from the `src/` directory so that absolute imports resolve correctly.
 
 ```bash
-uvicorn agent_runtime.app.api:app --reload
+cd src
+python -m uvicorn app.api.api:app --reload --host 0.0.0.0 --port 8000
+```
+
+The API will be available at:
+
+```
+http://localhost:8000
+```
+
+Interactive API docs (Swagger UI):
+
+```
+http://localhost:8000/docs
 ```
 
 ---
 
-### Default URL
+## Running the CLI
+
+For local testing and debugging without the UI:
+
+```bash
+cd src
+python -m app.cli.cli
+```
+
+Example session:
 
 ```
-http://127.0.0.1:8000
+Viz Agent ready. Type 'exit' to quit.
+You: show me hotels in St Ives
+Agent: The St Ives Bay Resort is available with 6 rooms...
+
+You: generate an Excel chart of ratings by town
+Agent: Your Excel report has been generated at /tmp/abc123.xlsx
 ```
 
 ---
 
-# API Endpoints
+## Running the Chat UI
 
-## Health Check
+In a separate terminal:
+
+```bash
+cd chat
+npm install
+npm run dev
+```
+
+The UI will be available at:
+
+```
+http://localhost:3000
+```
+
+The UI proxies all API calls to `http://localhost:8000`. To change the backend URL, edit `chat/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+---
+
+## API Endpoints
+
+### Health Check
 
 ```http
 GET /health
@@ -125,136 +148,74 @@ GET /health
 Response:
 
 ```json
-{
-  "status": "ok"
-}
+{ "status": "ok" }
 ```
 
 ---
 
-## Chat Endpoint
+### Visualize
 
 ```http
-POST /chat
+POST /visualize
 ```
 
-### Request
+Request:
 
 ```json
 {
-  "message": "Find a BnB in St Ives for 2 rooms"
+  "message": "Show me a bar chart of hotel ratings by town",
+  "session_id": "optional-session-id-for-conversation-continuity"
 }
 ```
 
-### Response
+Response:
 
 ```json
 {
-  "response": "Here are available BnBs in St Ives...",
-  "agent_used": "accommodation_booking_agent"
+  "response": "Your Excel report has been generated...",
+  "session_id": "a1b2c3d4-..."
 }
 ```
 
----
-
-## Debug Endpoint
-
-Returns raw LangGraph state for troubleshooting.
-
-```http
-POST /debug
-```
+Pass the returned `session_id` in subsequent requests to maintain conversation history.
 
 ---
 
-## Streaming Endpoint (optional)
-
-```http
-POST /chat/stream
-```
-
-Returns streamed response.
-
----
-
-# Testing API using curl
+### Test with curl
 
 ```bash
-curl -X POST http://127.0.0.1:8000/chat \
--H "Content-Type: application/json" \
--d '{"message":"weather in Cornwall"}'
+curl -X POST http://localhost:8000/visualize \
+  -H "Content-Type: application/json" \
+  -d '{"message": "which hotels in Newquay have rooms available?"}'
 ```
 
 ---
 
-# Project Structure Reminder
-
-```text
-src/agent_runtime/
-    app/
-        cli.py
-        api.py
-        bootstrap.py
-
-    core/
-        runtime.py
-        registry.py
-
-    agents/
-        travel_agent/
-        booking_agent/
-
-    tools/
-        travel_tools.py
-        booking_tools.py
-```
-
----
-
-# Running in Development Mode
-
-Auto reload when code changes:
+## Running Tests
 
 ```bash
-uvicorn agent_runtime.app.api:app --reload
+python -m pytest tests/ -v
 ```
 
 ---
 
-# Running with Docker (optional)
+## Quick Start (both services)
+
+Open two terminals:
+
+**Terminal 1 — Backend**
 
 ```bash
-docker build -t agent-runtime .
-docker run -p 8000:8000 agent-runtime
+cd src
+python -m uvicorn app.api.api:app --reload --host 0.0.0.0 --port 8000
 ```
 
----
-
-# Quick Start Summary
-
-### CLI
+**Terminal 2 — Frontend**
 
 ```bash
-python -m agent_runtime.app.cli
+cd chat
+npm install
+npm run dev
 ```
 
----
-
-### API
-
-```bash
-uvicorn agent_runtime.app.api:app --reload
-```
-
----
-
-# Next recommended enhancements
-
-• add conversation memory
-• add authentication
-• add tracing (LangSmith)
-• add async tool execution
-• deploy via Docker/Kubernetes
-• multi-tenant routing support
-
----
+Then open `http://localhost:3000`.
