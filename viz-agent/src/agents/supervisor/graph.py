@@ -18,6 +18,8 @@ SUPERVISOR_SYSTEM_PROMPT = (
 class SupervisorState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     next: str
+    data_ready: bool
+    viz_ready: bool
 
 
 def build_supervisor_graph(
@@ -42,18 +44,46 @@ def build_supervisor_graph(
     supervisor_llm = llm.with_structured_output(NextStep)
 
     def supervisor_node(state: SupervisorState) -> dict:
-        response = supervisor_llm.invoke(
-            [SystemMessage(content=SUPERVISOR_SYSTEM_PROMPT)] + state["messages"]
-        )
-        return {"next": response.next}
+
+        if not state.get("data_ready", False):
+            return {"next": "data_agent"}
+
+        if not state.get("viz_ready", False):
+            return {"next": "viz_agent"}
+
+        return {"next": "FINISH"}
 
     def data_agent_node(state: SupervisorState) -> dict:
-        result = data_agent_graph.invoke({"messages": state["messages"]})
-        return {"messages": result["messages"]}
+        result = data_agent_graph.invoke(
+            {"messages": state["messages"]}
+        )
+        
+        messages = result["messages"]
+        
+        messages.append(
+            SystemMessage(content="Data agent completed.")
+        )
+
+        return {
+            "messages": result["messages"],
+            "data_ready": True,
+        }
 
     def viz_agent_node(state: SupervisorState) -> dict:
-        result = viz_agent_graph.invoke({"messages": state["messages"]})
-        return {"messages": result["messages"]}
+        result = viz_agent_graph.invoke(
+            {"messages": state["messages"]}
+        )
+        
+        messages = result["messages"]
+        
+        messages.append(
+            SystemMessage(content="Visualization generation completed.")
+        )
+
+        return {
+            "messages": result["messages"],
+            "viz_ready": True,
+        }
 
     def route_supervisor(state: SupervisorState) -> str:
         next_step = state.get("next", "FINISH")
