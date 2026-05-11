@@ -5,6 +5,7 @@ from core.plugin.guardrail import VizGuardrailPlugin
 from core.plugin.registry import PluginRegistry
 from core.plugin.runtime import AgentRuntime
 from core.renderer.excel.excel import ExcelRenderer
+from core.renderer.image.image import ImageRenderer
 from core.renderer.registry import RendererRegistry
 from core.renderer.tableau.tableau import TableauRenderer
 from infra.checkpointer import build_checkpointer
@@ -20,8 +21,9 @@ def build_runtime() -> AgentRuntime:
 
     # --- Renderer registry ---
     renderer_registry = RendererRegistry()
-    renderer_registry.register(TableauRenderer())
+    renderer_registry.register(ImageRenderer())
     renderer_registry.register(ExcelRenderer())
+    renderer_registry.register(TableauRenderer())
 
     # --- Plugin registry ---
     registry = PluginRegistry()

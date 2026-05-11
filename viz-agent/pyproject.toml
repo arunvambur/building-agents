@@ -52,6 +52,9 @@ dependencies = [
     # --- Excel rendering ---
     "openpyxl>=3.1.0",
 
+    # --- Chart image rendering ---
+    "matplotlib>=3.8.0",
+
 ]
 
 [build-system]

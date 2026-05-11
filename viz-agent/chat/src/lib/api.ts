@@ -5,9 +5,13 @@ export interface VisualizeRequest {
   session_id?: string;
 }
 
+export type ResponseType = "text" | "image" | "file";
+
 export interface VisualizeResponse {
-  response: string;
   session_id: string;
+  type: ResponseType;
+  content: string;       // base64 PNG | /download/<id> URL | plain text
+  filename?: string;
 }
 
 export async function sendMessage(

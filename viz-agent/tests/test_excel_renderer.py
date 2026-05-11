@@ -5,6 +5,13 @@ import pytest
 from core.dsl.schema import Aggregation, Axis, Chart, Filter, VisualizationSpec
 from core.renderer.excel.excel import ExcelRenderer
 
+FILE_PREFIX = "file://"
+
+
+def strip_prefix(result: str) -> str:
+    assert result.startswith(FILE_PREFIX), f"Expected file:// prefix, got: {result[:30]}"
+    return result[len(FILE_PREFIX):]
+
 
 @pytest.fixture
 def renderer():
@@ -46,8 +53,10 @@ def test_does_not_support_tableau(renderer):
     assert renderer.supports("tableau") is False
 
 
-def test_render_returns_file_path(renderer, bar_spec, sample_data):
-    path = renderer.render(bar_spec, sample_data)
+def test_render_returns_file_prefix(renderer, bar_spec, sample_data):
+    result = renderer.render(bar_spec, sample_data)
+    assert result.startswith(FILE_PREFIX)
+    path = strip_prefix(result)
     assert path.endswith(".xlsx")
     assert os.path.exists(path)
     os.remove(path)
@@ -55,7 +64,7 @@ def test_render_returns_file_path(renderer, bar_spec, sample_data):
 
 def test_render_creates_correct_sheet_name(renderer, bar_spec, sample_data):
     import openpyxl
-    path = renderer.render(bar_spec, sample_data)
+    path = strip_prefix(renderer.render(bar_spec, sample_data))
     wb = openpyxl.load_workbook(path)
     assert "Avg Rating by Town" in wb.sheetnames
     os.remove(path)
@@ -77,14 +86,14 @@ def test_render_with_filters_creates_filter_sheet(renderer, sample_data):
         output="excel",
     )
     import openpyxl
-    path = renderer.render(spec, sample_data)
+    path = strip_prefix(renderer.render(spec, sample_data))
     wb = openpyxl.load_workbook(path)
     assert "Filters Applied" in wb.sheetnames
     os.remove(path)
 
 
 def test_render_with_empty_data(renderer, bar_spec):
-    path = renderer.render(bar_spec, [])
+    path = strip_prefix(renderer.render(bar_spec, []))
     assert os.path.exists(path)
     os.remove(path)
 
@@ -104,7 +113,7 @@ def test_render_line_chart(renderer, sample_data):
         layout="single",
         output="excel",
     )
-    path = renderer.render(spec, sample_data)
+    path = strip_prefix(renderer.render(spec, sample_data))
     assert os.path.exists(path)
     os.remove(path)
 
@@ -124,6 +133,6 @@ def test_render_pie_chart(renderer, sample_data):
         layout="single",
         output="excel",
     )
-    path = renderer.render(spec, sample_data)
+    path = strip_prefix(renderer.render(spec, sample_data))
     assert os.path.exists(path)
     os.remove(path)

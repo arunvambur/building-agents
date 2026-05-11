@@ -23,8 +23,7 @@ class ExcelRenderer(Renderer):
     def render(self, spec: VisualizationSpec, data: Any) -> str:
         """
         Renders a VisualizationSpec to an Excel workbook (.xlsx).
-        Each chart in the spec gets its own worksheet.
-        Returns the file path of the generated workbook.
+        Returns a 'file://<path>' string for API-layer detection.
         """
         wb = openpyxl.Workbook()
         wb.remove(wb.active)  # remove default empty sheet
@@ -42,7 +41,8 @@ class ExcelRenderer(Renderer):
 
         output_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.xlsx")
         wb.save(output_path)
-        return output_path
+        return f"file://{output_path}"
+
 
     # ---- internals ----
 

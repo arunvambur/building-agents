@@ -13,6 +13,7 @@ function generateId(): string {
 const WELCOME_MESSAGE: Message = {
   id: "welcome",
   role: "agent",
+  contentType: "text",
   content:
     "Hello! I am the Viz Agent. Ask me to query hotel data or generate visualizations — for example:\n\n" +
     "- Show me a bar chart of hotel ratings by town\n" +
@@ -35,6 +36,7 @@ export default function ChatWindow() {
     const userMessage: Message = {
       id: generateId(),
       role: "user",
+      contentType: "text",
       content: text,
       timestamp: new Date(),
     };
@@ -52,7 +54,9 @@ export default function ChatWindow() {
       const agentMessage: Message = {
         id: generateId(),
         role: "agent",
-        content: result.response,
+        contentType: result.type,
+        content: result.content,
+        filename: result.filename,
         timestamp: new Date(),
       };
 
@@ -61,6 +65,7 @@ export default function ChatWindow() {
       const errorMessage: Message = {
         id: generateId(),
         role: "error",
+        contentType: "text",
         content: err instanceof Error ? err.message : "An unexpected error occurred.",
         timestamp: new Date(),
       };
@@ -86,16 +91,12 @@ export default function ChatWindow() {
         </div>
 
         <div className="ml-auto flex items-center gap-3">
-          {/* Session indicator */}
           {sessionId && (
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-xs text-gray-400 font-mono">
-                {sessionId.slice(0, 8)}
-              </span>
+              <span className="text-xs text-gray-400 font-mono">{sessionId.slice(0, 8)}</span>
             </div>
           )}
-
           <ThemeToggle />
         </div>
       </header>
