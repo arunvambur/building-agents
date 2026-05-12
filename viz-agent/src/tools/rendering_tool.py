@@ -21,14 +21,21 @@ class RenderingTools(ToolPlugin):
         renderer_registry = self._renderer_registry
 
         @tool
-        def render_visualization(spec_dict: dict, data: dict) -> str:
+        def render_visualization(spec_dict: dict, data: list) -> str:
             """
             Validates a VisualizationSpec and renders it using the appropriate renderer.
+            ALWAYS call this tool to produce the final output — never skip it.
             Args:
-                spec_dict: A dict matching the VisualizationSpec schema.
-                data: The raw data payload to visualize.
+                spec_dict: A dict matching the VisualizationSpec schema. Must include:
+                    - charts: list of chart dicts, each with type, x (field+type), y (field+type),
+                      aggregation (optional), title (optional).
+                    - output: 'image' for inline chart PNG, 'excel' for downloadable spreadsheet.
+                    - filters: optional list of filter dicts.
+                    - layout: optional 'single', 'grid', or 'dashboard'.
+                data: The raw list of data records (list of dicts) from the data agent.
             Returns:
-                A URI or file path pointing to the rendered output.
+                For 'image': a base64-encoded PNG string prefixed with 'data:image/png;base64,'.
+                For 'excel': a file path prefixed with 'file://'.
             """
             try:
                 spec = VisualizationSpec(**spec_dict)

@@ -1,18 +1,8 @@
 from typing import Annotated, Any, Optional, TypedDict
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-
-
-SUPERVISOR_SYSTEM_PROMPT = (
-    "You are a supervisor orchestrating a data visualization pipeline. "
-    "Given the user request and the current conversation, decide the next step:\n"
-    "- 'data_agent': fetch or query the required data.\n"
-    "- 'viz_agent': build and render the visualization from available data.\n"
-    "- 'FINISH': the task is complete and a final answer is ready.\n"
-    "Always run 'data_agent' before 'viz_agent' unless data is already present."
-)
 
 
 class SupervisorState(TypedDict):
@@ -29,59 +19,55 @@ def build_supervisor_graph(
     checkpointer: Optional[Any] = None,
 ) -> Any:
     """
-    Builds a LangGraph supervisor that sequences data_agent → viz_agent.
-    The supervisor LLM decides routing at each step until FINISH.
+    Supervisor that sequences data_agent → viz_agent deterministically.
+    - data_agent runs first, its messages (including tool results) are passed to viz_agent.
+    - viz_agent must call render_visualization and its tool result becomes the final message.
+    - The last message in state is the raw renderer output (base64 image or file:// path).
     """
 
-    from pydantic import BaseModel, Field
-
-    class NextStep(BaseModel):
-        next: str = Field(
-            ...,
-            description="Next agent to call: 'data_agent', 'viz_agent', or 'FINISH'.",
-        )
-
-    supervisor_llm = llm.with_structured_output(NextStep)
-
     def supervisor_node(state: SupervisorState) -> dict:
-
         if not state.get("data_ready", False):
             return {"next": "data_agent"}
-
         if not state.get("viz_ready", False):
             return {"next": "viz_agent"}
-
         return {"next": "FINISH"}
 
     def data_agent_node(state: SupervisorState) -> dict:
-        result = data_agent_graph.invoke(
-            {"messages": state["messages"]}
-        )
-        
-        messages = result["messages"]
-        
-        messages.append(
-            SystemMessage(content="Data agent completed.")
-        )
-
+        result = data_agent_graph.invoke({"messages": state["messages"]})
+        # Pass all data agent messages (including tool results) forward
+        # so the viz_agent can extract the raw data from them.
         return {
             "messages": result["messages"],
             "data_ready": True,
         }
 
     def viz_agent_node(state: SupervisorState) -> dict:
-        result = viz_agent_graph.invoke(
-            {"messages": state["messages"]}
-        )
-        
-        messages = result["messages"]
-        
-        messages.append(
-            SystemMessage(content="Visualization generation completed.")
-        )
+        result = viz_agent_graph.invoke({"messages": state["messages"]})
+        all_messages = result["messages"]
+
+        # Find the last ToolMessage — that is the raw renderer output
+        # (base64 PNG or file:// path). Surface it as the final AI message
+        # so the API layer can detect the prefix correctly.
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        renderer_output = None
+        for msg in reversed(all_messages):
+            if isinstance(msg, ToolMessage):
+                renderer_output = msg.content
+                break
+
+        if renderer_output and (
+            renderer_output.startswith("data:image/png;base64,")
+            or renderer_output.startswith("file://")
+        ):
+            # Replace the last message with an AIMessage carrying the raw output
+            final_messages = list(all_messages) + [AIMessage(content=renderer_output)]
+        else:
+            # viz_agent responded with text — keep as-is
+            final_messages = list(all_messages)
 
         return {
-            "messages": result["messages"],
+            "messages": final_messages,
             "viz_ready": True,
         }
 
