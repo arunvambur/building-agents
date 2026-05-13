@@ -10,7 +10,7 @@ from core.renderer.registry import RendererRegistry
 from core.renderer.tableau.tableau import TableauRenderer
 from infra.checkpointer import build_checkpointer
 from infra.llm_models import get_llm
-from tools.query_tool import QueryTools
+from tools.query_tool import QueryTools, list_all_hotels_with_offers
 from tools.rendering_tool import RenderingTools
 
 
@@ -53,6 +53,8 @@ def build_runtime() -> AgentRuntime:
         data_agent_graph,
         viz_agent_graph,
         checkpointer=checkpointer,
+        renderer_registry=renderer_registry,
+        default_data_loader=lambda: list_all_hotels_with_offers.invoke({}),
     )
 
     # --- Guardrail ---

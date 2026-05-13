@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import uuid
 from typing import Any
@@ -11,6 +12,9 @@ from openpyxl.utils import get_column_letter
 
 from core.dsl.schema import Chart, VisualizationSpec
 from core.renderer.base import Renderer
+
+
+_INVALID_SHEET_TITLE_CHARS = re.compile(r"[\[\]:*?/\\]")
 
 
 class ExcelRenderer(Renderer):
@@ -31,8 +35,8 @@ class ExcelRenderer(Renderer):
         rows: list[dict] = data if isinstance(data, list) else []
 
         for i, chart_spec in enumerate(spec.charts):
-            sheet_title = chart_spec.title or f"Chart {i + 1}"
-            ws = wb.create_sheet(title=sheet_title[:31])  # Excel sheet name limit
+            sheet_title = self._sheet_title(chart_spec.title, i)
+            ws = wb.create_sheet(title=sheet_title)
             self._write_data_sheet(ws, rows, chart_spec)
             self._add_chart(ws, rows, chart_spec)
 
@@ -45,6 +49,11 @@ class ExcelRenderer(Renderer):
 
 
     # ---- internals ----
+
+    def _sheet_title(self, title: str | None, index: int) -> str:
+        title = title or f"Chart {index + 1}"
+        title = _INVALID_SHEET_TITLE_CHARS.sub("-", title).strip()
+        return (title or f"Chart {index + 1}")[:31]
 
     def _write_data_sheet(self, ws, rows: list[dict], chart_spec: Chart) -> None:
         """Write the raw data table into the worksheet with a styled header row."""

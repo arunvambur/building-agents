@@ -70,6 +70,28 @@ def test_render_creates_correct_sheet_name(renderer, bar_spec, sample_data):
     os.remove(path)
 
 
+def test_render_sanitizes_invalid_sheet_name_characters(renderer, sample_data):
+    spec = VisualizationSpec(
+        charts=[
+            Chart(
+                type="bar",
+                x=Axis(field="town", type="dimension"),
+                y=Axis(field="rating", type="measure"),
+                aggregation=Aggregation(field="rating", op="avg"),
+                title="Bar: Rating by Town",
+            )
+        ],
+        filters=None,
+        layout="single",
+        output="excel",
+    )
+    import openpyxl
+    path = strip_prefix(renderer.render(spec, sample_data))
+    wb = openpyxl.load_workbook(path)
+    assert "Bar- Rating by Town" in wb.sheetnames
+    os.remove(path)
+
+
 def test_render_with_filters_creates_filter_sheet(renderer, sample_data):
     spec = VisualizationSpec(
         charts=[
