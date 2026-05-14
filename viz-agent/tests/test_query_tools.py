@@ -45,6 +45,9 @@ def test_list_all_hotels_with_offers():
     assert len(results) == 10
     assert "hotel_name" in results[0]
     assert "price_single" in results[0]
+    assert "occupancy_rate" in results[0]
+    assert "monthly_revenue" in results[0]
+    assert "market_segment" in results[0]
 
 
 def test_get_hotels_by_price_single():

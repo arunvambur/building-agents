@@ -27,7 +27,20 @@ def search_hotels(town: Optional[str] = None, min_rating: Optional[float] = None
     Returns:
         List of matching hotels with hotel_id, hotel_name, town, address, rating, description.
     """
-    query = "SELECT hotel_id, hotel_name, town, address, rating, description FROM hotels WHERE 1=1"
+    query = """
+        SELECT
+            h.hotel_id, h.hotel_name, h.town, h.address, h.rating, h.description,
+            m.market_segment, m.star_category, m.peak_season,
+            m.occupancy_rate, m.cancellation_rate, m.avg_length_of_stay,
+            m.monthly_revenue, m.review_count, m.repeat_guest_rate,
+            m.distance_beach_km, m.distance_station_km,
+            m.family_score, m.business_score, m.sustainability_score,
+            m.spa_available, m.pet_friendly, m.parking_spaces,
+            m.latitude, m.longitude
+        FROM hotels h
+        LEFT JOIN hotel_performance_metrics m ON m.hotel_id = h.hotel_id
+        WHERE 1=1
+    """
     params: list = []
 
     if town:
@@ -77,12 +90,22 @@ def list_all_hotels_with_offers() -> list[dict]:
     Returns all hotels in Cornwall joined with their room offers.
     Useful for building overview charts and dashboards.
     Returns:
-        List of dicts with hotel_name, town, rating, available_rooms, price_single, price_double.
+        List of dicts with hotel_name, town, rating, prices, availability, and enriched analytics.
     """
     query = """
-        SELECT h.hotel_name, h.town, h.rating, o.available_rooms, o.price_single, o.price_double
+        SELECT
+            h.hotel_name, h.town, h.rating,
+            o.available_rooms, o.price_single, o.price_double,
+            m.market_segment, m.star_category, m.peak_season,
+            m.occupancy_rate, m.cancellation_rate, m.avg_length_of_stay,
+            m.monthly_revenue, m.review_count, m.repeat_guest_rate,
+            m.distance_beach_km, m.distance_station_km,
+            m.family_score, m.business_score, m.sustainability_score,
+            m.spa_available, m.pet_friendly, m.parking_spaces,
+            m.latitude, m.longitude
         FROM hotels h
         JOIN hotel_room_offers o ON h.hotel_id = o.hotel_id
+        LEFT JOIN hotel_performance_metrics m ON m.hotel_id = h.hotel_id
         ORDER BY h.rating DESC
     """
     with _get_connection() as conn:
@@ -102,9 +125,19 @@ def get_hotels_by_price(max_single: Optional[float] = None, max_double: Optional
         List of hotels with pricing that fits within the given budget.
     """
     query = """
-        SELECT h.hotel_name, h.town, h.rating, o.available_rooms, o.price_single, o.price_double
+        SELECT
+            h.hotel_name, h.town, h.rating,
+            o.available_rooms, o.price_single, o.price_double,
+            m.market_segment, m.star_category, m.peak_season,
+            m.occupancy_rate, m.cancellation_rate, m.avg_length_of_stay,
+            m.monthly_revenue, m.review_count, m.repeat_guest_rate,
+            m.distance_beach_km, m.distance_station_km,
+            m.family_score, m.business_score, m.sustainability_score,
+            m.spa_available, m.pet_friendly, m.parking_spaces,
+            m.latitude, m.longitude
         FROM hotels h
         JOIN hotel_room_offers o ON h.hotel_id = o.hotel_id
+        LEFT JOIN hotel_performance_metrics m ON m.hotel_id = h.hotel_id
         WHERE 1=1
     """
     params: list = []

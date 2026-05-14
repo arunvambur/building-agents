@@ -14,11 +14,15 @@ class _FakeRenderer:
         self.data = None
 
     def supports(self, format: str) -> bool:
-        return format in {"image", "excel"}
+        return format in {"image", "excel", "pdf", "ppt"}
 
     def render(self, spec, data) -> str:
         self.spec = spec
         self.data = data
+        if spec.output == "pdf":
+            return "file:///tmp/fake.pdf"
+        if spec.output == "ppt":
+            return "file:///tmp/fake.pptx"
         if spec.output == "excel":
             return "file:///tmp/fake.xlsx"
         return "data:image/png;base64,fake"
@@ -142,3 +146,36 @@ def test_supervisor_resets_ready_flags_for_new_human_turn_with_same_thread():
 
     assert first["messages"][-1].content == "data:image/png;base64,fake"
     assert second["messages"][-1].content == "file:///tmp/fake.xlsx"
+
+
+def test_supervisor_renders_multi_chart_pdf_without_model_pipeline():
+    rows = [{"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8}]
+
+    renderer = _FakeRenderer()
+    renderer_registry = RendererRegistry()
+    renderer_registry.register(renderer)
+    data_agent_graph = _FakeGraph(lambda state: (_ for _ in ()).throw(AssertionError("data agent called")))
+    viz_agent_graph = _FakeGraph(lambda state: (_ for _ in ()).throw(AssertionError("viz agent called")))
+
+    graph = build_supervisor_graph(
+        llm=None,
+        data_agent_graph=data_agent_graph,
+        viz_agent_graph=viz_agent_graph,
+        renderer_registry=renderer_registry,
+        default_data_loader=lambda: rows,
+    )
+
+    result = graph.invoke(
+        {"messages": [HumanMessage(
+            content=(
+                "Create a PDF report of Cornwall hotels with three charts: "
+                "average rating by town as a bar chart, "
+                "average single room price by town as a horizontal bar chart, "
+                "and hotel count by town as a donut chart."
+            )
+        )]}
+    )
+
+    assert result["messages"][-1].content == "file:///tmp/fake.pdf"
+    assert renderer.spec.output == "pdf"
+    assert len(renderer.spec.charts) == 3

@@ -32,6 +32,9 @@ _HOTEL_ROWS = [
 @pytest.mark.parametrize("text", [
     "Show me a bar chart",
     "Generate an Excel report",
+    "Show me a histogram of hotel ratings",
+    "Create a heatmap of hotel ratings",
+    "Create a bubble visualization",
     "Plot hotel ratings",
     "Create a dashboard",
     "Export to xlsx",
@@ -132,8 +135,18 @@ def test_extract_latest_records_invalid_json():
 
 @pytest.mark.parametrize("text,expected_type", [
     ("Show me a bar chart of ratings by town", "bar"),
+    ("Create a horizontal bar chart of prices by town", "horizontal_bar"),
     ("Plot a line chart of prices over time", "line"),
     ("Show a pie chart of room distribution", "pie"),
+    ("Show me a donut chart of hotel count by town", "donut"),
+    ("Show me a histogram of hotel ratings", "histogram"),
+    ("Create a heatmap of hotel ratings by town and hotel name", "heatmap"),
+    ("Create a grouped bar chart comparing prices by town", "grouped_bar"),
+    ("Create a stacked bar chart comparing prices by town", "stacked_bar"),
+    ("Create a bubble chart of price and rating", "bubble"),
+    ("Create a gauge chart showing average hotel rating", "gauge"),
+    ("Create a waterfall chart of prices by town", "waterfall"),
+    ("Show an area chart of prices by town", "area"),
     ("Scatter plot of price vs rating", "scatter"),
     ("Show the trend of ratings", "line"),
 ])
@@ -156,6 +169,11 @@ def test_infers_x_field_hotel_name_from_keyword():
     assert spec.charts[0].x.field == "hotel_name"
 
 
+def test_infers_x_field_market_segment_from_keyword():
+    spec = build_fallback_spec("bar chart of revenue by market segment", _HOTEL_ROWS)
+    assert spec.charts[0].x.field == "market_segment"
+
+
 def test_infers_y_field_rating():
     spec = build_fallback_spec("show ratings by town", _HOTEL_ROWS)
     assert spec.charts[0].y.field == "rating"
@@ -167,15 +185,68 @@ def test_infers_y_field_available_rooms():
 
 
 def test_infers_y_field_price_double():
-    # "double" without "room" triggers price_double; "room" takes priority over "double"
-    spec = build_fallback_spec("show double prices by town", _HOTEL_ROWS)
+    spec = build_fallback_spec("show double room prices by town", _HOTEL_ROWS)
     assert spec.charts[0].y.field == "price_double"
 
+
+def test_infers_y_field_price_single_for_single_room_price():
+    spec = build_fallback_spec("show average single room price by town", _HOTEL_ROWS)
+    assert spec.charts[0].y.field == "price_single"
 
 
 def test_infers_y_field_price_single_for_price_keyword():
     spec = build_fallback_spec("show prices by town", _HOTEL_ROWS)
     assert spec.charts[0].y.field == "price_single"
+
+
+@pytest.mark.parametrize("text,expected_field", [
+    ("show occupancy by town", "occupancy_rate"),
+    ("show cancellation rate by town", "cancellation_rate"),
+    ("show monthly revenue by market segment", "monthly_revenue"),
+    ("show review count by town", "review_count"),
+    ("show repeat guest rate by town", "repeat_guest_rate"),
+    ("show beach distance by town", "distance_beach_km"),
+    ("show family score by town", "family_score"),
+    ("show sustainability score by town", "sustainability_score"),
+    ("show parking spaces by town", "parking_spaces"),
+])
+def test_infers_enriched_metric_fields(text, expected_field):
+    spec = build_fallback_spec(text, _HOTEL_ROWS)
+    assert spec.charts[0].y.field == expected_field
+
+
+def test_grouped_bar_infers_second_price_measure():
+    spec = build_fallback_spec(
+        "Create a grouped bar chart comparing single room price and double room price by town",
+        _HOTEL_ROWS,
+    )
+    chart = spec.charts[0]
+    assert chart.type == "grouped_bar"
+    assert chart.y.field == "price_single"
+    assert chart.y2 is not None
+    assert chart.y2.field == "price_double"
+
+
+def test_scatter_uses_metric_order_for_versus_prompt():
+    spec = build_fallback_spec(
+        "scatter plot of occupancy rate versus monthly revenue",
+        _HOTEL_ROWS,
+    )
+    chart = spec.charts[0]
+    assert chart.x.field == "occupancy_rate"
+    assert chart.y.field == "monthly_revenue"
+
+
+def test_stacked_bar_infers_second_price_measure():
+    spec = build_fallback_spec(
+        "Create a stacked bar chart comparing single room price and double room price by town",
+        _HOTEL_ROWS,
+    )
+    chart = spec.charts[0]
+    assert chart.type == "stacked_bar"
+    assert chart.y.field == "price_single"
+    assert chart.y2 is not None
+    assert chart.y2.field == "price_double"
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +277,35 @@ def test_output_excel_for_excel_keyword():
     assert spec.output == "excel"
 
 
+def test_output_pdf_for_pdf_keyword():
+    spec = build_fallback_spec("create a PDF report", _HOTEL_ROWS)
+    assert spec.output == "pdf"
+
+
+def test_output_ppt_for_powerpoint_keyword():
+    spec = build_fallback_spec("make a PowerPoint presentation", _HOTEL_ROWS)
+    assert spec.output == "ppt"
+
+
 def test_output_image_by_default():
     spec = build_fallback_spec("show a bar chart", _HOTEL_ROWS)
     assert spec.output == "image"
+
+
+def test_builds_multiple_charts_from_report_prompt():
+    spec = build_fallback_spec(
+        "Create a PDF report of Cornwall hotels with three charts: "
+        "average rating by town as a bar chart, "
+        "average single room price by town as a horizontal bar chart, "
+        "and hotel count by town as a donut chart.",
+        _HOTEL_ROWS,
+    )
+
+    assert spec.output == "pdf"
+    assert spec.layout == "grid"
+    assert [chart.type for chart in spec.charts] == ["bar", "horizontal_bar", "donut"]
+    assert [chart.y.field for chart in spec.charts] == ["rating", "price_single", "hotel_id"]
+    assert spec.charts[2].aggregation.op == "count"
 
 
 # ---------------------------------------------------------------------------
