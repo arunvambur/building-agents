@@ -79,3 +79,40 @@ class VizGuardrailPlugin(GuardrailPlugin):
             return True, None
 
         return False, AIMessage(content=_BLOCK_MESSAGE)
+
+    async def avalidate(self, state: dict) -> Tuple[bool, Optional[AIMessage]]:
+        messages = state.get("messages", [])
+        if not messages:
+            return True, None
+
+        last = messages[-1]
+        if not isinstance(last, HumanMessage):
+            return True, None
+
+        content = last.content.strip()
+
+        # Fast-pass: no LLM call needed
+        if _ALLOW_PATTERNS.search(content):
+            return True, None
+
+        # Async LLM call — does not block the event loop
+        result: GuardrailDecision = await self.guardrail.ainvoke([
+            SystemMessage(
+                content=(
+                    "You are a permissive content filter for a hotel data visualization assistant. "
+                    "Allow any query related to: hotels, rooms, pricing, availability, ratings, towns, "
+                    "charts, graphs, bar charts, line charts, pie charts, scatter plots, dashboards, "
+                    "Excel files, spreadsheets, reports, data queries, or data visualization. "
+                    "Only block queries that are COMPLETELY unrelated to hotels or data visualization "
+                    "(e.g. weather forecasts, recipes, sports scores, political news). "
+                    "When in doubt, ALLOW the query."
+                )
+            ),
+            HumanMessage(content=content),
+        ])
+
+        if result.is_viz_related:
+            return True, None
+
+        return False, AIMessage(content=_BLOCK_MESSAGE)
+

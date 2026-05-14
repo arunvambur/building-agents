@@ -42,6 +42,16 @@ class GuardrailPlugin(ABC):
     @abstractmethod
     def validate(self, state: dict) -> Tuple[bool, Optional[Any]]:
         """
-        Validate the incoming state.
+        Validate the incoming state synchronously.
         Returns (True, None) if allowed, (False, AIMessage) if blocked.
         """
+
+    async def avalidate(self, state: dict) -> Tuple[bool, Optional[Any]]:
+        """
+        Async variant of validate. Default implementation offloads to a thread
+        so blocking LLM calls do not stall the event loop.
+        Subclasses may override with a native async implementation.
+        """
+        import asyncio
+        return await asyncio.to_thread(self.validate, state)
+

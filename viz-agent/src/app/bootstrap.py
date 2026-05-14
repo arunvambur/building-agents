@@ -9,7 +9,6 @@ from core.renderer.image.image import ImageRenderer
 from core.renderer.pdf.pdf import PDFRenderer
 from core.renderer.ppt.ppt import PPTRenderer
 from core.renderer.registry import RendererRegistry
-from core.renderer.tableau.tableau import TableauRenderer
 from infra.checkpointer import build_checkpointer
 from infra.llm_models import get_llm
 from tools.query_tool import QueryTools
@@ -27,7 +26,8 @@ def build_runtime() -> AgentRuntime:
     renderer_registry.register(ExcelRenderer())
     renderer_registry.register(PDFRenderer())
     renderer_registry.register(PPTRenderer())
-    renderer_registry.register(TableauRenderer())
+    # TableauRenderer is not registered until fully implemented.
+    # See core/renderer/tableau/tableau.py for requirements.
 
     # --- Plugin registry ---
     registry = PluginRegistry()
@@ -80,4 +80,5 @@ def build_runtime() -> AgentRuntime:
         checkpointer=checkpointer,
         supervisor=supervisor_graph,
     )
+
 

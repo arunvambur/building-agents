@@ -3,6 +3,7 @@ import uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
@@ -36,12 +37,16 @@ def register(runtime: AgentRuntime) -> APIRouter:
     router = APIRouter()
 
     @router.post("/visualize", response_model=VisualizeResponse)
-    async def visualize(request: VisualizeRequest) -> VisualizeResponse:
+    async def visualize(request: VisualizeRequest):
         thread_id = request.session_id or str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
         state = {"messages": [HumanMessage(content=request.message)]}
 
-        result = await runtime.ainvoke(state, config=config)
+        try:
+            result = await runtime.ainvoke(state, config=config)
+        except TimeoutError as exc:
+            return JSONResponse(status_code=504, content={"detail": str(exc)})
+
         raw: str = result["messages"][-1].content
 
         # --- Image response ---
