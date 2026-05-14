@@ -14,17 +14,17 @@ from core.renderer.base import Renderer
 matplotlib.use("Agg")
 
 _PALETTE = [
-    "#4f6ef7", "#f97316", "#22c55e", "#a855f7",
-    "#ec4899", "#14b8a6", "#eab308", "#ef4444",
+    "#7b9ccc", "#e8a87c", "#82b89a", "#b39dcc",
+    "#d4899e", "#6db3b0", "#c9b96e", "#c47f7f",
 ]
 
-_BG_DARK   = "#111827"
-_BG_PANEL  = "#1f2937"
-_GRID_COLOR = "#374151"
-_TICK_COLOR = "#9ca3af"
-_LABEL_COLOR = "#9ca3af"
-_TITLE_COLOR = "#f3f4f6"
-_TEXT_COLOR  = "#e5e7eb"
+_BG_DARK    = "#1a1f2e"
+_BG_PANEL   = "#232938"
+_GRID_COLOR = "#2e3548"
+_TICK_COLOR = "#7a8499"
+_LABEL_COLOR = "#7a8499"
+_TITLE_COLOR = "#c8cdd8"
+_TEXT_COLOR  = "#b0b8c8"
 
 
 class ImageRenderer(Renderer):
