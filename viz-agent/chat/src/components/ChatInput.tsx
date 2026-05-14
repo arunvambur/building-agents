@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, KeyboardEvent } from "react";
+import { useRef, useState, KeyboardEvent, useCallback } from "react";
 
 interface Props {
   onSend: (message: string) => void;
@@ -10,6 +10,7 @@ interface Props {
 export default function ChatInput({ onSend, disabled }: Props) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleSend() {
     const trimmed = value.trim();
@@ -28,12 +29,15 @@ export default function ChatInput({ onSend, disabled }: Props) {
     }
   }
 
-  function handleInput() {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }
+  const handleInput = useCallback(() => {
+    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+    resizeTimerRef.current = setTimeout(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    }, 40);
+  }, []);
 
   return (
     <div className="

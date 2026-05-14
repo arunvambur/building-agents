@@ -1,14 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { sendMessage } from "@/lib/api";
 import ChatInput from "./ChatInput";
 import MessageBubble, { Message } from "./MessageBubble";
 import ThemeToggle from "./ThemeToggle";
-
-function generateId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
 
 const WELCOME_MESSAGE: Message = {
   id: "welcome",
@@ -26,15 +22,23 @@ export default function ChatWindow() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [lastUserText, setLastUserText] = useState<string>("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleSend(text: string) {
+  const handleSend = useCallback(async (text: string) => {
+    // Abort any in-flight request before starting a new one
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    setLastUserText(text);
+
     const userMessage: Message = {
-      id: generateId(),
+      id: crypto.randomUUID(),
       role: "user",
       contentType: "text",
       content: text,
@@ -45,14 +49,14 @@ export default function ChatWindow() {
     setLoading(true);
 
     try {
-      const result = await sendMessage(text, sessionId);
+      const result = await sendMessage(text, sessionId, abortRef.current.signal);
 
       if (!sessionId) {
         setSessionId(result.session_id);
       }
 
       const agentMessage: Message = {
-        id: generateId(),
+        id: crypto.randomUUID(),
         role: "agent",
         contentType: result.type,
         content: result.content,
@@ -63,8 +67,11 @@ export default function ChatWindow() {
 
       setMessages((prev) => [...prev, agentMessage]);
     } catch (err) {
+      // Ignore abort errors caused by the user sending a new message
+      if (err instanceof Error && err.name === "AbortError") return;
+
       const errorMessage: Message = {
-        id: generateId(),
+        id: crypto.randomUUID(),
         role: "error",
         contentType: "text",
         content: err instanceof Error ? err.message : "An unexpected error occurred.",
@@ -74,7 +81,19 @@ export default function ChatWindow() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [sessionId]);
+
+  const handleRetry = useCallback(() => {
+    if (!lastUserText) return;
+    // Remove the last error message before retrying
+    setMessages((prev) => {
+      const lastIdx = [...prev].reverse().findIndex((m) => m.role === "error");
+      if (lastIdx === -1) return prev;
+      const removeIdx = prev.length - 1 - lastIdx;
+      return prev.filter((_, i) => i !== removeIdx);
+    });
+    handleSend(lastUserText);
+  }, [lastUserText, handleSend]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-950 transition-colors duration-200">
@@ -105,7 +124,11 @@ export default function ChatWindow() {
       {/* Messages */}
       <main className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 space-y-5 bg-gray-50 dark:bg-gray-950 transition-colors duration-200">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onRetry={msg.role === "error" ? handleRetry : undefined}
+          />
         ))}
 
         {/* Typing indicator */}
@@ -132,4 +155,3 @@ export default function ChatWindow() {
     </div>
   );
 }
-

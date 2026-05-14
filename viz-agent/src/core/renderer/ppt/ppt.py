@@ -3,6 +3,7 @@ import logging
 import os
 import tempfile
 import uuid
+from datetime import date
 from typing import Any
 
 import matplotlib
@@ -20,12 +21,12 @@ matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
-# Brand colours as RGBColor
-_BRAND_BLUE = RGBColor(0x4F, 0x6E, 0xF7)
-_DARK = RGBColor(0x11, 0x18, 0x27)
-_WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-_LIGHT_GRAY = RGBColor(0xF3, 0xF4, 0xF6)
-_MID_GRAY = RGBColor(0x6B, 0x72, 0x80)
+# Brand colours — kept in sync with image.py subtle palette
+_BRAND_BLUE = RGBColor(0x7B, 0x9C, 0xCC)
+_DARK       = RGBColor(0x1A, 0x1F, 0x2E)
+_WHITE      = RGBColor(0xFF, 0xFF, 0xFF)
+_LIGHT_GRAY = RGBColor(0xF0, 0xF2, 0xF5)
+_MID_GRAY   = RGBColor(0x7A, 0x84, 0x99)
 
 # Slide dimensions (widescreen 16:9)
 _SLIDE_W = Cm(33.87)
@@ -86,7 +87,6 @@ class PPTRenderer(Renderer):
             font_size=Pt(32), bold=True, color=_WHITE, align=PP_ALIGN.CENTER,
         )
         # Subtitle
-        from datetime import date
         subtitle = (
             f"{len(spec.charts)} chart(s)  |  {len(rows)} records  |  "
             f"Generated {date.today().strftime('%d %b %Y')}"
@@ -237,7 +237,6 @@ class PPTRenderer(Renderer):
         run.font.color.rgb = color
 
     def _add_rect(self, slide, left, top, width, height, color: RGBColor) -> None:
-        from pptx.util import Emu
         shape = slide.shapes.add_shape(
             1,  # MSO_SHAPE_TYPE.RECTANGLE
             left, top, width, height,

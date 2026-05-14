@@ -51,12 +51,22 @@ def build_runtime() -> AgentRuntime:
         registry.get_tools("viz_agent"),
     )
 
+    # Resolve the list_all_hotels_with_offers tool for use as the fallback data loader
+    data_tools = {t.name: t for t in registry.get_tools("data_agent")}
+    default_data_loader = (
+        lambda: data_tools["list_all_hotels_with_offers"].invoke({})
+        if "list_all_hotels_with_offers" in data_tools
+        else None
+    )
+
     # --- Supervisor graph ---
     supervisor_graph = build_supervisor_graph(
         llm,
         data_agent_graph,
         viz_agent_graph,
         checkpointer=checkpointer,
+        renderer_registry=renderer_registry,
+        default_data_loader=default_data_loader,
     )
 
     # --- Guardrail ---
@@ -70,3 +80,4 @@ def build_runtime() -> AgentRuntime:
         checkpointer=checkpointer,
         supervisor=supervisor_graph,
     )
+

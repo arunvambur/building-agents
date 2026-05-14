@@ -3,6 +3,7 @@ import logging
 import os
 import tempfile
 import uuid
+from datetime import date
 from typing import Any
 
 import matplotlib
@@ -29,12 +30,12 @@ matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
-# Brand colours
-_BRAND_BLUE = colors.HexColor("#4f6ef7")
-_DARK_BG = colors.HexColor("#1f2937")
-_LIGHT_GRAY = colors.HexColor("#f3f4f6")
-_MID_GRAY = colors.HexColor("#6b7280")
-_BORDER = colors.HexColor("#e5e7eb")
+# Brand colours — kept in sync with image.py subtle palette
+_BRAND_BLUE  = colors.HexColor("#7b9ccc")
+_DARK_BG     = colors.HexColor("#1a1f2e")
+_LIGHT_GRAY  = colors.HexColor("#f0f2f5")
+_MID_GRAY    = colors.HexColor("#7a8499")
+_BORDER      = colors.HexColor("#d1d5db")
 
 
 class PDFRenderer(Renderer):
@@ -95,8 +96,8 @@ class PDFRenderer(Renderer):
         # Cover header
         story.append(Paragraph("Viz Agent — Visualization Report", title_style))
         story.append(Paragraph(
-            f"Generated {self._today()} &nbsp;|&nbsp; {len(spec.charts)} chart(s) &nbsp;|&nbsp; "
-            f"{len(rows)} records",
+            f"Generated {date.today().strftime('%d %b %Y')} &nbsp;|&nbsp; "
+            f"{len(spec.charts)} chart(s) &nbsp;|&nbsp; {len(rows)} records",
             subtitle_style,
         ))
         story.append(Spacer(1, 0.4 * cm))
@@ -135,12 +136,6 @@ class PDFRenderer(Renderer):
 
     def _render_chart_to_bytes(self, chart_spec: Chart, rows: list[dict]) -> bytes:
         """Render a single chart to PNG bytes using the ImageRenderer internals."""
-        from core.dsl.schema import VisualizationSpec
-
-        single_spec = VisualizationSpec(
-            charts=[chart_spec],
-            output="image",
-        )
         fig, ax = plt.subplots(1, 1, figsize=(9, 5))
         self._image_renderer._apply_theme(fig)
         self._image_renderer._draw_chart(ax, chart_spec, rows)
@@ -181,7 +176,3 @@ class PDFRenderer(Renderer):
             ("BOTTOMPADDING", (0, 1), (-1, -1), 5),
         ]))
         return table
-
-    def _today(self) -> str:
-        from datetime import date
-        return date.today().strftime("%d %b %Y")

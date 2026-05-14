@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import Literal, Optional
 
@@ -7,8 +8,6 @@ from pydantic import BaseModel
 
 from app.api.routes.download import register_file
 from core.plugin.runtime import AgentRuntime
-
-router = APIRouter()
 
 IMAGE_PREFIX = "data:image/png;base64,"
 FILE_PREFIX = "file://"
@@ -34,6 +33,7 @@ class VisualizeResponse(BaseModel):
 
 
 def register(runtime: AgentRuntime) -> APIRouter:
+    router = APIRouter()
 
     @router.post("/visualize", response_model=VisualizeResponse)
     async def visualize(request: VisualizeRequest) -> VisualizeResponse:
@@ -55,8 +55,6 @@ def register(runtime: AgentRuntime) -> APIRouter:
         # --- File response (excel / pdf / ppt) ---
         if raw.startswith(FILE_PREFIX):
             file_path = raw[len(FILE_PREFIX):]
-            # Determine extension from the temp file path
-            import os
             ext = os.path.splitext(file_path)[-1].lower()
             file_format, name_template = _EXT_TO_FRIENDLY.get(ext, ("file", "output_{}.bin"))
             friendly_name = name_template.format(thread_id[:8])

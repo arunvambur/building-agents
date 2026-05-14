@@ -1,5 +1,6 @@
 import logging
 import logging.config
+import os
 
 from fastapi import FastAPI
 
@@ -7,8 +8,8 @@ from app.api.routes import download, health
 from app.api.routes.visualize import register as register_visualize
 from app.bootstrap import build_runtime
 
-# Configure logging for the entire application.
-# All agent/supervisor/runtime loggers inherit from the root.
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 logging.config.dictConfig({
     "version": 1,
     "disable_existing_loggers": False,
@@ -25,20 +26,20 @@ logging.config.dictConfig({
         }
     },
     "root": {
-        "level": "DEBUG",
+        "level": _LOG_LEVEL,
         "handlers": ["console"],
     },
     # Quieten noisy third-party loggers
     "loggers": {
-        "httpx": {"level": "WARNING"},
-        "httpcore": {"level": "WARNING"},
-        "openai": {"level": "WARNING"},
-        "langchain": {"level": "WARNING"},
-        "langgraph": {"level": "WARNING"},
-        "chromadb": {"level": "WARNING"},
-        "uvicorn": {"level": "INFO"},
+        "httpx":          {"level": "WARNING"},
+        "httpcore":       {"level": "WARNING"},
+        "openai":         {"level": "WARNING"},
+        "langchain":      {"level": "WARNING"},
+        "langgraph":      {"level": "WARNING"},
+        "chromadb":       {"level": "WARNING"},
+        "uvicorn":        {"level": "INFO"},
         "uvicorn.access": {"level": "INFO"},
-        "matplotlib": {"level": "WARNING"},
+        "matplotlib":     {"level": "WARNING"},
     },
 })
 

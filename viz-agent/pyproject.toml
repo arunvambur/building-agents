@@ -54,6 +54,7 @@ dependencies = [
 
     # --- Chart image rendering ---
     "matplotlib>=3.8.0",
+    "numpy>=1.26.0",
 
     # --- PDF rendering ---
     "reportlab>=4.0.0",
@@ -62,6 +63,10 @@ dependencies = [
     "python-pptx>=1.0.0",
 
 ]
+
+[project.scripts]
+viz-api = "app.api.api:app"
+viz-cli = "app.cli.cli:chat"
 
 [build-system]
 requires = ["setuptools>=68"]

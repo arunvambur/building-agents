@@ -18,9 +18,10 @@ export interface Message {
 
 interface Props {
   message: Message;
+  onRetry?: () => void;
 }
 
-export default function MessageBubble({ message }: Props) {
+export default function MessageBubble({ message, onRetry }: Props) {
   const isUser = message.role === "user";
   const isError = message.role === "error";
   const [time, setTime] = useState("");
@@ -39,7 +40,7 @@ export default function MessageBubble({ message }: Props) {
 
         {/* Image response */}
         {!isUser && message.contentType === "image" && (
-          <div className="rounded-2xl rounded-tl-sm overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md">
+          <div className="rounded-2xl rounded-tl-sm overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md max-h-[600px] overflow-y-auto">
             <img
               src={`data:image/png;base64,${message.content}`}
               alt="Generated chart"
@@ -74,6 +75,26 @@ export default function MessageBubble({ message }: Props) {
           >
             {message.content}
           </div>
+        )}
+
+        {/* Retry button — only on error bubbles when a handler is provided */}
+        {isError && onRetry && (
+          <button
+            onClick={onRetry}
+            className="
+              flex items-center gap-1.5 mt-0.5 px-3 py-1.5 rounded-lg text-xs font-medium
+              text-red-600 dark:text-red-400
+              border border-red-300 dark:border-red-700/50
+              hover:bg-red-50 dark:hover:bg-red-900/30
+              transition-colors
+            "
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
+            </svg>
+            Retry
+          </button>
         )}
 
       </div>
