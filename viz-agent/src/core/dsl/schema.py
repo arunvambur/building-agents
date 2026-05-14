@@ -16,9 +16,18 @@ class Axis(BaseModel):
 
 
 class Chart(BaseModel):
-    type: Literal["bar", "line", "scatter", "pie"]
+    type: Literal[
+        # Original
+        "bar", "line", "scatter", "pie",
+        # High value
+        "horizontal_bar", "stacked_bar", "area", "donut", "grouped_bar", "histogram",
+        # Medium value
+        "heatmap", "bubble", "waterfall", "gauge",
+    ]
     x: Axis
     y: Axis
+    # Second measure for grouped/stacked/area/bubble (size encoding)
+    y2: Optional[Axis] = None
     aggregation: Optional[Aggregation] = None
     title: Optional[str] = None
 
