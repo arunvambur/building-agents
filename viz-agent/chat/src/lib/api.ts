@@ -10,8 +10,9 @@ export type ResponseType = "text" | "image" | "file";
 export interface VisualizeResponse {
   session_id: string;
   type: ResponseType;
-  content: string;       // base64 PNG | /download/<id> URL | plain text
+  content: string;        // base64 PNG | /download/<id> URL | plain text
   filename?: string;
+  file_format?: string;   // "excel" | "pdf" | "ppt"
 }
 
 export async function sendMessage(

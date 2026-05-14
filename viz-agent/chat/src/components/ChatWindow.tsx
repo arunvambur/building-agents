@@ -57,6 +57,7 @@ export default function ChatWindow() {
         contentType: result.type,
         content: result.content,
         filename: result.filename,
+        fileFormat: result.file_format,
         timestamp: new Date(),
       };
 
@@ -131,3 +132,4 @@ export default function ChatWindow() {
     </div>
   );
 }
+

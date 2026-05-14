@@ -6,11 +6,13 @@ from core.plugin.registry import PluginRegistry
 from core.plugin.runtime import AgentRuntime
 from core.renderer.excel.excel import ExcelRenderer
 from core.renderer.image.image import ImageRenderer
+from core.renderer.pdf.pdf import PDFRenderer
+from core.renderer.ppt.ppt import PPTRenderer
 from core.renderer.registry import RendererRegistry
 from core.renderer.tableau.tableau import TableauRenderer
 from infra.checkpointer import build_checkpointer
 from infra.llm_models import get_llm
-from tools.query_tool import QueryTools, list_all_hotels_with_offers
+from tools.query_tool import QueryTools
 from tools.rendering_tool import RenderingTools
 
 
@@ -23,6 +25,8 @@ def build_runtime() -> AgentRuntime:
     renderer_registry = RendererRegistry()
     renderer_registry.register(ImageRenderer())
     renderer_registry.register(ExcelRenderer())
+    renderer_registry.register(PDFRenderer())
+    renderer_registry.register(PPTRenderer())
     renderer_registry.register(TableauRenderer())
 
     # --- Plugin registry ---
@@ -47,14 +51,12 @@ def build_runtime() -> AgentRuntime:
         registry.get_tools("viz_agent"),
     )
 
-    # --- Supervisor graph (sequences data_agent → viz_agent) ---
+    # --- Supervisor graph ---
     supervisor_graph = build_supervisor_graph(
         llm,
         data_agent_graph,
         viz_agent_graph,
         checkpointer=checkpointer,
-        renderer_registry=renderer_registry,
-        default_data_loader=lambda: list_all_hotels_with_offers.invoke({}),
     )
 
     # --- Guardrail ---

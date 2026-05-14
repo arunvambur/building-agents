@@ -1,23 +1,48 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging
+import logging.config
 
-from app.api.routes import health
-from app.api.routes import download
+from fastapi import FastAPI
+
+from app.api.routes import download, health
 from app.api.routes.visualize import register as register_visualize
 from app.bootstrap import build_runtime
 
-app = FastAPI(title="Viz Agent API", version="0.1.0")
+# Configure logging for the entire application.
+# All agent/supervisor/runtime loggers inherit from the root.
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+            "datefmt": "%H:%M:%S",
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+        }
+    },
+    "root": {
+        "level": "DEBUG",
+        "handlers": ["console"],
+    },
+    # Quieten noisy third-party loggers
+    "loggers": {
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+        "openai": {"level": "WARNING"},
+        "langchain": {"level": "WARNING"},
+        "langgraph": {"level": "WARNING"},
+        "chromadb": {"level": "WARNING"},
+        "uvicorn": {"level": "INFO"},
+        "uvicorn.access": {"level": "INFO"},
+        "matplotlib": {"level": "WARNING"},
+    },
+})
 
-# CORS middleware - allow all origins for now, but should be restricted in production
-# Aura do not delete this while generatig code for the frontend, as it is required for the frontend to call the API without CORS issues.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # replace with frontend URL later
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-# End of CORS
+app = FastAPI(title="Viz Agent API", version="0.1.0")
 
 runtime = build_runtime()
 

@@ -33,4 +33,4 @@ class VisualizationSpec(BaseModel):
     charts: List[Chart]
     filters: Optional[List[Filter]] = None
     layout: Optional[Literal["single", "grid", "dashboard"]] = None
-    output: Literal["image", "excel", "tableau"]
+    output: Literal["image", "excel", "pdf", "ppt", "tableau"]

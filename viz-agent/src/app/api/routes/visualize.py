@@ -10,10 +10,14 @@ from core.plugin.runtime import AgentRuntime
 
 router = APIRouter()
 
-# Sentinel prefix the rendering tools embed in their return value
-# so the API layer can detect image vs file vs text responses.
 IMAGE_PREFIX = "data:image/png;base64,"
 FILE_PREFIX = "file://"
+
+_EXT_TO_FRIENDLY = {
+    ".xlsx": ("excel", "cornwall_hotels_{}.xlsx"),
+    ".pdf":  ("pdf",   "cornwall_hotels_{}.pdf"),
+    ".pptx": ("ppt",   "cornwall_hotels_{}.pptx"),
+}
 
 
 class VisualizeRequest(BaseModel):
@@ -24,8 +28,9 @@ class VisualizeRequest(BaseModel):
 class VisualizeResponse(BaseModel):
     session_id: str
     type: Literal["text", "image", "file"]
-    content: str                  # base64 PNG | download URL | plain text
+    content: str
     filename: Optional[str] = None
+    file_format: Optional[str] = None   # "excel" | "pdf" | "ppt"
 
 
 def register(runtime: AgentRuntime) -> APIRouter:
@@ -44,20 +49,24 @@ def register(runtime: AgentRuntime) -> APIRouter:
             return VisualizeResponse(
                 session_id=thread_id,
                 type="image",
-                content=raw[len(IMAGE_PREFIX):],  # strip prefix, send raw base64
+                content=raw[len(IMAGE_PREFIX):],
             )
 
-        # --- File response ---
+        # --- File response (excel / pdf / ppt) ---
         if raw.startswith(FILE_PREFIX):
             file_path = raw[len(FILE_PREFIX):]
-            filename = file_path.split("/")[-1].split("\\")[-1]
-            friendly_name = f"cornwall_hotels_{thread_id[:8]}.xlsx"
+            # Determine extension from the temp file path
+            import os
+            ext = os.path.splitext(file_path)[-1].lower()
+            file_format, name_template = _EXT_TO_FRIENDLY.get(ext, ("file", "output_{}.bin"))
+            friendly_name = name_template.format(thread_id[:8])
             file_id = register_file(file_path, friendly_name)
             return VisualizeResponse(
                 session_id=thread_id,
                 type="file",
                 content=f"/download/{file_id}",
                 filename=friendly_name,
+                file_format=file_format,
             )
 
         # --- Plain text response ---

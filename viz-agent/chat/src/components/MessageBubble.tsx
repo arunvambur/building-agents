@@ -12,6 +12,7 @@ export interface Message {
   content: string;
   contentType: ContentType;
   filename?: string;
+  fileFormat?: string;
   timestamp: Date;
 }
 
@@ -24,7 +25,6 @@ export default function MessageBubble({ message }: Props) {
   const isError = message.role === "error";
   const [time, setTime] = useState("");
 
-  // Resolved client-side only to avoid server/client locale mismatch
   useEffect(() => {
     setTime(message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
   }, [message.timestamp]);
@@ -48,12 +48,13 @@ export default function MessageBubble({ message }: Props) {
           </div>
         )}
 
-        {/* File download response */}
+        {/* File download response — excel / pdf / ppt */}
         {!isUser && message.contentType === "file" && (
-          <div className="w-72">
+          <div className="w-80">
             <FileCard
               downloadUrl={message.content}
-              filename={message.filename || "report.xlsx"}
+              filename={message.filename || "report"}
+              fileFormat={message.fileFormat}
             />
           </div>
         )}

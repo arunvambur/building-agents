@@ -55,6 +55,12 @@ dependencies = [
     # --- Chart image rendering ---
     "matplotlib>=3.8.0",
 
+    # --- PDF rendering ---
+    "reportlab>=4.0.0",
+
+    # --- PowerPoint rendering ---
+    "python-pptx>=1.0.0",
+
 ]
 
 [build-system]
