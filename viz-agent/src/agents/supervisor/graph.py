@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
@@ -13,6 +14,8 @@ from agents.supervisor.formatting import (
     wants_csv,
     write_csv,
 )
+from agents.supervisor.data_fallback import resolve_data_query
+from agents.supervisor.fallback import render_fallback_visualization
 from agents.supervisor.intent import IntentType, build_intent_classifier
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,7 @@ class SupervisorState(TypedDict):
     intent:   str        # "data" | "viz" | "both" | ""
     data_ready: bool
     viz_ready:  bool
+    next: str            # "data_agent" | "viz_agent" | "FINISH" | ""
 
 
 def build_supervisor_graph(
@@ -78,6 +82,33 @@ def build_supervisor_graph(
     def data_agent_node(state: SupervisorState) -> dict:
         logger.info("[data_agent] starting — message count: %d", len(state["messages"]))
 
+        intent = state.get("intent", "data")
+        user_text = get_user_text(state["messages"])
+        deterministic_records = resolve_data_query(user_text)
+
+        if deterministic_records is not None:
+            logger.info("[data_agent] deterministic query matched — %d records", len(deterministic_records))
+
+            if intent == IntentType.data:
+                if wants_csv(user_text):
+                    formatted = write_csv(deterministic_records)
+                    logger.info("[data_agent] CSV written — %d records", len(deterministic_records))
+                else:
+                    formatted = format_table(deterministic_records)
+                    logger.info("[data_agent] table formatted — %d records", len(deterministic_records))
+                return {"messages": [AIMessage(content=formatted)], "data_ready": True}
+
+            return {
+                "messages": [
+                    ToolMessage(
+                        content=json.dumps(deterministic_records),
+                        name="deterministic_data_query",
+                        tool_call_id="deterministic-data-query",
+                    )
+                ],
+                "data_ready": True,
+            }
+
         result = data_agent_graph.invoke({"messages": state["messages"]})
         agent_messages = list(result["messages"])
         logger.info("[data_agent] completed — returned %d messages", len(agent_messages))
@@ -87,11 +118,8 @@ def build_supervisor_graph(
                 logger.debug("[data_agent] tool result (%s): %s",
                              msg.name, msg.content[:120].replace("\n", " "))
 
-        intent = state.get("intent", "data")
-
         if intent == IntentType.data:
             # Detect CSV intent from the original user message in state
-            user_text = get_user_text(state["messages"])
             csv_requested = wants_csv(user_text)
 
             # Extract records directly from ToolMessages — bypass the LLM's
@@ -130,6 +158,22 @@ def build_supervisor_graph(
     # ------------------------------------------------------------------ #
     def viz_agent_node(state: SupervisorState) -> dict:
         logger.info("[viz_agent] starting — message count: %d", len(state["messages"]))
+
+        request_text = get_user_text(state["messages"])
+        try:
+            rendered = render_fallback_visualization(
+                request_text,
+                state["messages"],
+                renderer_registry,
+                default_data_loader=default_data_loader,
+            )
+        except Exception as exc:
+            logger.warning("[viz_agent] deterministic renderer failed — falling back to viz_agent: %s", exc)
+            rendered = None
+
+        if rendered:
+            logger.info("[viz_agent] deterministic renderer output detected — length: %d", len(rendered))
+            return {"messages": [AIMessage(content=rendered)], "viz_ready": True}
 
         result = viz_agent_graph.invoke({"messages": state["messages"]})
         all_messages = result["messages"]
@@ -173,9 +217,7 @@ def build_supervisor_graph(
 
     def route_entry(state: SupervisorState) -> str:
         last = state["messages"][-1] if state["messages"] else None
-        data_ready = state.get("data_ready", False)
-        viz_ready  = state.get("viz_ready", False)
-        if isinstance(last, HumanMessage) and not data_ready and not viz_ready:
+        if isinstance(last, HumanMessage):
             return "intent"
         return "supervisor"
 

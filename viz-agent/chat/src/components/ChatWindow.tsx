@@ -55,6 +55,22 @@ export default function ChatWindow() {
         setSessionId(result.session_id);
       }
 
+      const timestamp = new Date();
+      const agentMessages: Message[] = [];
+
+      if (result.type !== "table" && result.headers && result.rows) {
+        agentMessages.push({
+          id: crypto.randomUUID(),
+          role: "agent",
+          contentType: "table",
+          content: "",
+          headers: result.headers,
+          rows: result.rows,
+          rowCount: result.row_count,
+          timestamp,
+        });
+      }
+
       const agentMessage: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -62,13 +78,14 @@ export default function ChatWindow() {
         content: result.content,
         filename: result.filename,
         fileFormat: result.file_format,
-        headers: result.headers,
-        rows: result.rows,
-        rowCount: result.row_count,
-        timestamp: new Date(),
+        headers: result.type === "table" ? result.headers : undefined,
+        rows: result.type === "table" ? result.rows : undefined,
+        rowCount: result.type === "table" ? result.row_count : undefined,
+        timestamp,
       };
 
-      setMessages((prev) => [...prev, agentMessage]);
+      agentMessages.push(agentMessage);
+      setMessages((prev) => [...prev, ...agentMessages]);
     } catch (err) {
       // Ignore abort errors caused by the user sending a new message
       if (err instanceof Error && err.name === "AbortError") return;

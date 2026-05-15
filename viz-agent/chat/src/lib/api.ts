@@ -1,3 +1,5 @@
+import { parseTableContent } from "./table";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes — LLM calls can be slow
 
@@ -47,7 +49,8 @@ export async function sendMessage(
       throw new Error(`API error ${res.status}: ${text}`);
     }
 
-    return res.json() as Promise<VisualizeResponse>;
+    const data = await res.json() as VisualizeResponse;
+    return normalizeResponse(data);
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error("Request timed out. The server is taking too long to respond.");
@@ -56,6 +59,22 @@ export async function sendMessage(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function normalizeResponse(response: VisualizeResponse): VisualizeResponse {
+  if (response.type !== "text") return response;
+
+  const table = parseTableContent(response.content);
+  if (!table) return response;
+
+  return {
+    ...response,
+    type: "table",
+    content: "",
+    headers: table.headers,
+    rows: table.rows,
+    row_count: table.row_count,
+  };
 }
 
 function anySignal(signals: AbortSignal[]): AbortSignal {

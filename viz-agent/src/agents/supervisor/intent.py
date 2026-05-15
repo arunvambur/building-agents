@@ -55,6 +55,11 @@ _VIZ_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_CSV_PATTERN = re.compile(
+    r"\b(csv|comma[ -]separated|download\s+csv|as\s+csv)\b",
+    re.IGNORECASE,
+)
+
 _DATA_PATTERN = re.compile(
     r"\b("
     r"list|find|show|get|fetch|query|search|which|what|who|where|how many|"
@@ -65,16 +70,32 @@ _DATA_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_BOTH_PATTERN = re.compile(
+    r"("
+    r"\b(?:list|find|show|get|fetch|query|search|display|give me|return)\b"
+    r".*\b(?:and|also|plus|with)\b"
+    r".*\b(?:chart|graph|plot|visuali[sz]e?|excel|spreadsheet|xlsx|pdf|powerpoint|pptx|report|export)\b"
+    r"|"
+    r"\b(?:chart|graph|plot|visuali[sz]e?|excel|spreadsheet|xlsx|pdf|powerpoint|pptx|report|export)\b"
+    r".*\b(?:and|also|plus|with)\b"
+    r".*\b(?:list|table|data|rows|records|hotels?)\b"
+    r")",
+    re.IGNORECASE,
+)
+
 
 def classify_intent_fast(text: str) -> IntentType | None:
     """
     Keyword-based fast classifier. Returns None if ambiguous (needs LLM).
     """
+    if _CSV_PATTERN.search(text):
+        return IntentType.data
+
     has_viz  = bool(_VIZ_PATTERN.search(text))
     has_data = bool(_DATA_PATTERN.search(text))
 
     if has_viz and has_data:
-        return IntentType.both
+        return IntentType.both if _BOTH_PATTERN.search(text) else IntentType.viz
     if has_viz:
         return IntentType.viz
     if has_data:

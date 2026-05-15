@@ -91,14 +91,11 @@ def last_ai_content(messages: list) -> Optional[str]:
 def format_table(records: list[dict]) -> str:
     """
     Returns a 'table://<json>' string for multi-row results.
-    Single-record results are returned as plain key-value text.
+    Single-record results are also returned as tables so the UI has a
+    consistent data display path.
     """
     if not records:
         return "No results found."
-
-    if len(records) == 1:
-        r = records[0]
-        return "\n".join(f"**{k}**: {v}" for k, v in r.items())
 
     headers = list(records[0].keys())
     rows = [[str(r.get(h, "")) for h in headers] for r in records]

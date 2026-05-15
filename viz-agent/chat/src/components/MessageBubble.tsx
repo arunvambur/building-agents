@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { parseTableContent } from "@/lib/table";
 import DataTable from "./DataTable";
 import FileCard from "./FileCard";
 
@@ -30,6 +31,14 @@ export default function MessageBubble({ message, onRetry }: Props) {
   const isUser = message.role === "user";
   const isError = message.role === "error";
   const [time, setTime] = useState("");
+  const parsedTable = !isUser && message.contentType === "text"
+    ? parseTableContent(message.content)
+    : null;
+  const tableHeaders = message.contentType === "table" ? message.headers : parsedTable?.headers;
+  const tableRows = message.contentType === "table" ? message.rows : parsedTable?.rows;
+  const tableRowCount = message.contentType === "table"
+    ? message.rowCount
+    : parsedTable?.row_count;
 
   useEffect(() => {
     setTime(message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
@@ -55,12 +64,12 @@ export default function MessageBubble({ message, onRetry }: Props) {
         )}
 
         {/* Tabular data */}
-        {!isUser && message.contentType === "table" && message.headers && message.rows && (
+        {!isUser && tableHeaders && tableRows && (
           <div className="w-full">
             <DataTable
-              headers={message.headers}
-              rows={message.rows}
-              rowCount={message.rowCount ?? message.rows.length}
+              headers={tableHeaders}
+              rows={tableRows}
+              rowCount={tableRowCount ?? tableRows.length}
             />
           </div>
         )}
@@ -77,7 +86,7 @@ export default function MessageBubble({ message, onRetry }: Props) {
         )}
 
         {/* Text / error / user bubble */}
-        {(isUser || message.contentType === "text" || isError) && (
+        {(isUser || (message.contentType === "text" && !parsedTable) || isError) && (
           <div
             className={`
               rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap break-words

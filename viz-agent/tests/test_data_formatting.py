@@ -140,11 +140,13 @@ def test_format_table_rows_are_strings():
         assert all(isinstance(cell, str) for cell in row)
 
 
-def test_format_table_single_row_returns_plain_text():
+def test_format_table_single_row_returns_table_prefix():
     result = format_table([{"hotel_name": "Harbour Inn", "rating": "4.2"}])
-    assert not result.startswith("table://")
-    assert "hotel_name" in result
-    assert "Harbour Inn" in result
+    assert result.startswith("table://")
+    payload = json.loads(result[len("table://"):])
+    assert payload["headers"] == ["hotel_name", "rating"]
+    assert payload["rows"] == [["Harbour Inn", "4.2"]]
+    assert payload["count"] == 1
 
 
 def test_format_table_empty_returns_no_results():
