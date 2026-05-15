@@ -6,14 +6,18 @@ export interface VisualizeRequest {
   session_id?: string;
 }
 
-export type ResponseType = "text" | "image" | "file";
+export type ResponseType = "text" | "image" | "file" | "table";
 
 export interface VisualizeResponse {
   session_id: string;
   type: ResponseType;
-  content: string;        // base64 PNG | /download/<id> URL | plain text
+  content: string;        // base64 PNG | /download/<id> URL | plain text | "" for table
   filename?: string;
-  file_format?: string;   // "excel" | "pdf" | "ppt"
+  file_format?: string;   // "excel" | "pdf" | "ppt" | "csv"
+  // Populated when type === "table"
+  headers?: string[];
+  rows?: string[][];
+  row_count?: number;
 }
 
 export async function sendMessage(
@@ -26,7 +30,6 @@ export async function sendMessage(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  // Merge caller-supplied signal with the internal timeout signal
   const mergedSignal = signal
     ? anySignal([signal, controller.signal])
     : controller.signal;
@@ -55,7 +58,6 @@ export async function sendMessage(
   }
 }
 
-/** Aborts as soon as any of the provided signals fires. */
 function anySignal(signals: AbortSignal[]): AbortSignal {
   const controller = new AbortController();
   for (const signal of signals) {

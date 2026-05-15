@@ -14,6 +14,7 @@ _MIME_TYPES = {
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pdf":  "application/pdf",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".csv":  "text/csv",
 }
 
 

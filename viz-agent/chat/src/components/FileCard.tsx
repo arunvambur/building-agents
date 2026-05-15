@@ -44,6 +44,19 @@ function getFileType(filename: string, fileFormat?: string): FileType {
     };
   }
 
+  if (fmt === "csv" || filename.endsWith(".csv")) {
+    return {
+      label: "CSV file",
+      iconBg: "bg-teal-100 dark:bg-teal-900/40",
+      iconColor: "text-teal-600 dark:text-teal-400",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM8 17v-1h8v1H8zm0-3v-1h8v1H8zm0-3V10h8v1H8z"/>
+        </svg>
+      ),
+    };
+  }
+
   // Default: Excel
   return {
     label: "Excel spreadsheet",

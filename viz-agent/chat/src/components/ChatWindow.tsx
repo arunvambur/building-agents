@@ -62,6 +62,9 @@ export default function ChatWindow() {
         content: result.content,
         filename: result.filename,
         fileFormat: result.file_format,
+        headers: result.headers,
+        rows: result.rows,
+        rowCount: result.row_count,
         timestamp: new Date(),
       };
 

@@ -170,9 +170,19 @@ def build_supervisor_graph(
     # ------------------------------------------------------------------ #
     def _build_text_response(messages: list[BaseMessage]) -> Optional[str]:
         """
-        Extracts the last tool result from data_agent messages and formats
-        it as a clean human-readable text response.
+        Extracts the last tool result and returns a structured response:
+        - 'table://<json>'  for tabular data (rendered as a table in the UI)
+        - 'csv://<path>'    when the user explicitly asked for CSV
+        - plain text        for single-record or error responses
         """
+        # Detect if the user asked for CSV
+        user_text = ""
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                user_text = msg.content.lower()
+
+        wants_csv = any(kw in user_text for kw in ("csv", "comma separated", "comma-separated", "download csv"))
+
         for msg in reversed(messages):
             if not isinstance(msg, ToolMessage):
                 continue
@@ -193,17 +203,25 @@ def build_supervisor_graph(
             if not records:
                 continue
 
-            return _format_records(records)
+            if wants_csv:
+                return _write_csv(records)
 
-        # Fallback: return the last AI message content if no tool result found
+            return _format_table(records)
+
+        # Fallback: return the last AI message content
         for msg in reversed(messages):
             if isinstance(msg, AIMessage) and msg.content:
                 return msg.content
 
         return None
 
-    def _format_records(records: list[dict]) -> str:
-        """Formats a list of dicts into a readable markdown-style table."""
+
+    def _format_table(records: list[dict]) -> str:
+        """
+        Returns a 'table://<json>' string carrying headers and rows.
+        The UI renders this as a styled HTML table.
+        Single-record responses are returned as plain key-value text.
+        """
         if not records:
             return "No results found."
 
@@ -213,19 +231,33 @@ def build_supervisor_graph(
             return "\n".join(lines)
 
         headers = list(records[0].keys())
-        col_widths = {h: max(len(str(h)), max(len(str(r.get(h, ""))) for r in records))
-                      for h in headers}
+        rows = [[str(r.get(h, "")) for h in headers] for r in records]
+        payload = json.dumps({"headers": headers, "rows": rows, "count": len(records)})
+        return f"table://{payload}"
 
-        header_row = " | ".join(str(h).ljust(col_widths[h]) for h in headers)
-        separator  = " | ".join("-" * col_widths[h] for h in headers)
-        rows = [
-            " | ".join(str(r.get(h, "")).ljust(col_widths[h]) for h in headers)
-            for r in records
-        ]
 
-        lines = [header_row, separator] + rows
-        lines.append(f"\n{len(records)} record(s) found.")
-        return "\n".join(lines)
+    def _write_csv(records: list[dict]) -> str:
+        """
+        Writes records to a temp CSV file and returns a 'csv://<path>' string.
+        The API layer registers the file and returns a download URL.
+        """
+        import csv
+        import os
+        import tempfile
+        import uuid as _uuid
+
+        if not records:
+            return "No results found."
+
+        headers = list(records[0].keys())
+        path = os.path.join(tempfile.gettempdir(), f"{_uuid.uuid4()}.csv")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(records)
+
+        logger.info("[data_agent] CSV written to %s (%d records)", path, len(records))
+        return f"csv://{path}"
 
     # ------------------------------------------------------------------ #
     # graph assembly                                                        #

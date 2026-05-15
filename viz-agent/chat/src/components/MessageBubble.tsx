@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import DataTable from "./DataTable";
 import FileCard from "./FileCard";
 
 export type Role = "user" | "agent" | "error";
-export type ContentType = "text" | "image" | "file";
+export type ContentType = "text" | "image" | "file" | "table";
 
 export interface Message {
   id: string;
@@ -13,6 +14,10 @@ export interface Message {
   contentType: ContentType;
   filename?: string;
   fileFormat?: string;
+  // Table data
+  headers?: string[];
+  rows?: string[][];
+  rowCount?: number;
   timestamp: Date;
 }
 
@@ -32,15 +37,15 @@ export default function MessageBubble({ message, onRetry }: Props) {
 
   return (
     <div className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className={`flex flex-col gap-1 ${isUser ? "items-end max-w-[75%]" : "items-start max-w-[85%]"}`}>
+      <div className={`flex flex-col gap-1 ${isUser ? "items-end max-w-[75%]" : "items-start w-full max-w-[95%]"}`}>
 
         <span className="text-xs text-gray-400 dark:text-gray-500 px-1">
           {isUser ? "You" : "Viz Agent"}{time ? ` \u00b7 ${time}` : ""}
         </span>
 
-        {/* Image response */}
+        {/* Inline PNG chart */}
         {!isUser && message.contentType === "image" && (
-          <div className="rounded-2xl rounded-tl-sm overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md max-h-[600px] overflow-y-auto">
+          <div className="rounded-2xl rounded-tl-sm overflow-hidden border border-gray-200 dark:border-gray-700 shadow-md">
             <img
               src={`data:image/png;base64,${message.content}`}
               alt="Generated chart"
@@ -49,7 +54,18 @@ export default function MessageBubble({ message, onRetry }: Props) {
           </div>
         )}
 
-        {/* File download response — excel / pdf / ppt */}
+        {/* Tabular data */}
+        {!isUser && message.contentType === "table" && message.headers && message.rows && (
+          <div className="w-full">
+            <DataTable
+              headers={message.headers}
+              rows={message.rows}
+              rowCount={message.rowCount ?? message.rows.length}
+            />
+          </div>
+        )}
+
+        {/* File download — excel / pdf / ppt / csv */}
         {!isUser && message.contentType === "file" && (
           <div className="w-80">
             <FileCard
@@ -77,7 +93,7 @@ export default function MessageBubble({ message, onRetry }: Props) {
           </div>
         )}
 
-        {/* Retry button — only on error bubbles when a handler is provided */}
+        {/* Retry button on error bubbles */}
         {isError && onRetry && (
           <button
             onClick={onRetry}
@@ -89,7 +105,8 @@ export default function MessageBubble({ message, onRetry }: Props) {
               transition-colors
             "
           >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 .49-3.5" />
             </svg>

@@ -49,7 +49,8 @@ _VIZ_PATTERN = re.compile(
     r"\b("
     r"chart|graph|plot|bar|line|scatter|pie|donut|histogram|heatmap|bubble|waterfall|gauge|"
     r"visuali[sz]e?|dashboard|image|png|picture|diagram|"
-    r"excel|spreadsheet|xlsx|pdf|powerpoint|pptx|presentation|slides|report|export|download"
+    r"excel|spreadsheet|xlsx|pdf|powerpoint|pptx|presentation|slides|report|export|download|"
+    r"csv|comma.separated"
     r")\b",
     re.IGNORECASE,
 )
