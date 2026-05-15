@@ -1,25 +1,21 @@
 import json
 import logging
-from typing import Annotated, Any, Callable, Optional, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
-from agents.supervisor.fallback import (
-    is_visualization_request,
-    latest_human_text,
-    render_fallback_visualization,
-)
+from agents.supervisor.intent import IntentType, build_intent_classifier
 
 logger = logging.getLogger(__name__)
 
 
 class SupervisorState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    next: str
+    intent:   str        # "data" | "viz" | "both" | ""
     data_ready: bool
-    viz_ready: bool
+    viz_ready:  bool
 
 
 def build_supervisor_graph(
@@ -27,237 +23,226 @@ def build_supervisor_graph(
     data_agent_graph: Any,
     viz_agent_graph: Any,
     checkpointer: Optional[Any] = None,
+    # kept for signature compatibility — unused in this implementation
     renderer_registry: Optional[Any] = None,
-    default_data_loader: Optional[Callable[[], list[dict]]] = None,
+    default_data_loader: Optional[Any] = None,
 ) -> Any:
 
+    classify_intent = build_intent_classifier(llm)
+
+    # ------------------------------------------------------------------ #
+    # intent_node — runs once per new human message                        #
+    # ------------------------------------------------------------------ #
+    def intent_node(state: SupervisorState) -> dict:
+        last = state["messages"][-1] if state["messages"] else None
+        text = getattr(last, "content", "") if isinstance(last, HumanMessage) else ""
+        intent = classify_intent(text)
+        logger.info("[intent] '%s' → %s", text[:80], intent.value)
+        return {
+            "intent":     intent.value,
+            "data_ready": False,
+            "viz_ready":  False,
+        }
+
+    # ------------------------------------------------------------------ #
+    # supervisor_node — routes between agents based on intent + flags      #
+    # ------------------------------------------------------------------ #
     def supervisor_node(state: SupervisorState) -> dict:
+        intent     = state.get("intent", "data")
         data_ready = state.get("data_ready", False)
-        viz_ready = state.get("viz_ready", False)
-        last_message = state["messages"][-1] if state.get("messages") else None
-        request_text = latest_human_text(state["messages"])
+        viz_ready  = state.get("viz_ready", False)
 
-        # Reset flags if a new human message arrives mid-session
-        if (
-            getattr(last_message, "type", None) == "human"
-            and (data_ready or viz_ready)
-        ):
-            logger.info("[supervisor] new human message — resetting pipeline flags")
-            if _can_render_direct(request_text):
-                logger.info("[supervisor] routing → direct_renderer")
-                return {"next": "direct_renderer", "data_ready": False, "viz_ready": False}
-            return {"next": "data_agent", "data_ready": False, "viz_ready": False}
-
-        if not data_ready:
-            if _can_render_direct(request_text):
-                logger.info("[supervisor] routing → direct_renderer")
-                return {"next": "direct_renderer"}
-            logger.info("[supervisor] routing → data_agent")
-            return {"next": "data_agent"}
-
-        if not is_visualization_request(request_text):
-            logger.info("[supervisor] data-only request complete → FINISH")
+        # Data-only intent: run data_agent once, then finish
+        if intent == IntentType.data:
+            if not data_ready:
+                logger.info("[supervisor] intent=data → data_agent")
+                return {"next": "data_agent"}
+            logger.info("[supervisor] intent=data, data ready → FINISH")
             return {"next": "FINISH"}
 
+        # Viz or both: data_agent first, then viz_agent
+        if not data_ready:
+            logger.info("[supervisor] intent=%s → data_agent", intent)
+            return {"next": "data_agent"}
+
         if not viz_ready:
-            logger.info("[supervisor] routing → viz_agent")
+            logger.info("[supervisor] intent=%s, data ready → viz_agent", intent)
             return {"next": "viz_agent"}
 
         logger.info("[supervisor] pipeline complete → FINISH")
         return {"next": "FINISH"}
 
-    def _can_render_direct(request_text: str) -> bool:
-        return bool(renderer_registry and default_data_loader and is_visualization_request(request_text))
-
-    def direct_renderer_node(state: SupervisorState) -> dict:
-        request_text = latest_human_text(state["messages"])
-        logger.info("[direct_renderer] starting")
-        output = render_fallback_visualization(
-            request_text,
-            state["messages"],
-            renderer_registry,
-            default_data_loader,
-        )
-        if not output:
-            logger.warning("[direct_renderer] no output — falling back to data_agent")
-            return {"next": "data_agent", "data_ready": False, "viz_ready": False}
-        logger.info("[direct_renderer] completed — output length: %d", len(output))
-        return {
-            "messages": [AIMessage(content=output)],
-            "data_ready": True,
-            "viz_ready": True,
-        }
-
+    # ------------------------------------------------------------------ #
+    # data_agent_node                                                       #
+    # ------------------------------------------------------------------ #
     def data_agent_node(state: SupervisorState) -> dict:
         logger.info("[data_agent] starting — message count: %d", len(state["messages"]))
-        try:
-            result = data_agent_graph.invoke({"messages": state["messages"]})
-            messages = list(result["messages"])
-            logger.info("[data_agent] completed — returned %d messages", len(messages))
 
-            # Log tool calls made
-            for msg in messages:
-                if isinstance(msg, ToolMessage):
-                    preview = msg.content[:120].replace("\n", " ")
-                    logger.debug("[data_agent] tool result (%s): %s", msg.name, preview)
+        result = data_agent_graph.invoke({"messages": state["messages"]})
+        messages = list(result["messages"])
+        logger.info("[data_agent] completed — returned %d messages", len(messages))
 
-        except Exception as e:
-            logger.error("[data_agent] error: %s", e, exc_info=True)
-            fallback_output = render_fallback_visualization(
-                latest_human_text(state["messages"]),
-                state["messages"],
-                renderer_registry,
-                default_data_loader,
-            )
-            if fallback_output:
-                logger.warning("[data_agent] rendered fallback output after data agent error")
-                return {
-                    "messages": [AIMessage(content=fallback_output)],
-                    "data_ready": True,
-                    "viz_ready": True,
-                }
-            raise
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                logger.debug("[data_agent] tool result (%s): %s",
+                             msg.name, msg.content[:120].replace("\n", " "))
 
-        # Fallback: if no tool results found, inject default hotel data
-        has_tool_data = any(isinstance(m, ToolMessage) for m in messages)
-        if not has_tool_data and default_data_loader:
-            logger.warning("[data_agent] no tool results found — injecting fallback hotel data")
-            data = default_data_loader()
-            tool_call_id = "fallback-list-all-hotels"
-            messages.extend([
-                AIMessage(
-                    content="",
-                    tool_calls=[{"name": "list_all_hotels_with_offers", "args": {}, "id": tool_call_id}],
-                ),
-                ToolMessage(
-                    content=json.dumps(data),
-                    name="list_all_hotels_with_offers",
-                    tool_call_id=tool_call_id,
-                ),
-            ])
-            logger.info("[data_agent] fallback data injected — %d records", len(data))
+        intent = state.get("intent", "data")
 
-        if not is_visualization_request(latest_human_text(state["messages"])):
-            data_response = _data_response_message(messages)
-            if data_response:
-                messages.append(data_response)
+        # For data-only intent: format tool results into a readable text response
+        if intent == IntentType.data:
+            text_response = _build_text_response(messages)
+            if text_response:
+                logger.info("[data_agent] data-only — appending formatted text response")
+                messages = messages + [AIMessage(content=text_response)]
 
         return {"messages": messages, "data_ready": True}
 
+    # ------------------------------------------------------------------ #
+    # viz_agent_node                                                        #
+    # ------------------------------------------------------------------ #
     def viz_agent_node(state: SupervisorState) -> dict:
         logger.info("[viz_agent] starting — message count: %d", len(state["messages"]))
-        try:
-            result = viz_agent_graph.invoke({"messages": state["messages"]})
-            all_messages = result["messages"]
-            logger.info("[viz_agent] completed — returned %d messages", len(all_messages))
 
-            # Log tool calls made by viz agent
-            for msg in all_messages:
-                if isinstance(msg, ToolMessage):
-                    preview = msg.content[:120].replace("\n", " ")
-                    logger.debug("[viz_agent] tool result (%s): %s", msg.name, preview)
+        result = viz_agent_graph.invoke({"messages": state["messages"]})
+        all_messages = result["messages"]
+        logger.info("[viz_agent] completed — returned %d messages", len(all_messages))
 
-        except Exception as e:
-            logger.error("[viz_agent] error: %s", e, exc_info=True)
-            fallback_output = render_fallback_visualization(
-                latest_human_text(state["messages"]),
-                state["messages"],
-                renderer_registry,
-                default_data_loader,
-            )
-            if fallback_output:
-                logger.warning("[viz_agent] rendered fallback output after viz agent error")
-                return {
-                    "messages": [AIMessage(content=fallback_output)],
-                    "viz_ready": True,
-                }
-            raise
+        for msg in all_messages:
+            if isinstance(msg, ToolMessage):
+                logger.debug("[viz_agent] tool result (%s): %s",
+                             msg.name, msg.content[:120].replace("\n", " "))
 
-        # Find the last ToolMessage with a renderer output prefix
+        # Find the last ToolMessage carrying a renderer output prefix
         renderer_output = None
         for msg in reversed(all_messages):
             if isinstance(msg, ToolMessage):
                 c = msg.content
                 if c.startswith("data:image/png;base64,") or c.startswith("file://"):
                     renderer_output = c
-                    logger.info(
-                        "[viz_agent] renderer output detected — type: %s, length: %d",
-                        "image" if c.startswith("data:") else "file",
-                        len(c),
-                    )
+                    logger.info("[viz_agent] renderer output detected — type: %s, length: %d",
+                                "image" if c.startswith("data:") else "file", len(c))
                     break
 
         if renderer_output:
             final_messages = list(all_messages) + [AIMessage(content=renderer_output)]
         else:
-            logger.warning("[viz_agent] no renderer output found in tool messages — returning last message as-is")
-            last_content = getattr(all_messages[-1], "content", "")[:120] if all_messages else ""
-            logger.debug("[viz_agent] last message content: %r", last_content)
-            fallback_output = render_fallback_visualization(
-                latest_human_text(all_messages),
-                all_messages,
-                renderer_registry,
-                default_data_loader,
-            )
-            if fallback_output:
-                logger.warning("[viz_agent] rendered fallback output after missing renderer output")
-                final_messages = list(all_messages) + [AIMessage(content=fallback_output)]
-            else:
-                final_messages = list(all_messages)
+            logger.warning("[viz_agent] no renderer output found — returning last message as-is")
+            logger.debug("[viz_agent] last content: %r",
+                         getattr(all_messages[-1], "content", "")[:200] if all_messages else "")
+            final_messages = list(all_messages)
 
         return {"messages": final_messages, "viz_ready": True}
 
+    # ------------------------------------------------------------------ #
+    # routing                                                               #
+    # ------------------------------------------------------------------ #
+    def route_after_intent(state: SupervisorState) -> str:
+        """Always go to supervisor after intent classification."""
+        return "supervisor"
+
     def route_supervisor(state: SupervisorState) -> str:
         next_step = state.get("next", "FINISH")
-        if next_step == "direct_renderer":
-            return "direct_renderer"
         if next_step == "data_agent":
             return "data_agent"
         if next_step == "viz_agent":
             return "viz_agent"
         return END
 
-    def _data_response_message(messages: list[BaseMessage]) -> Optional[AIMessage]:
+    def route_entry(state: SupervisorState) -> str:
+        """
+        Entry point routing:
+        - New human message with no intent set → classify intent first
+        - Otherwise → go straight to supervisor
+        """
+        last = state["messages"][-1] if state["messages"] else None
+        intent = state.get("intent", "")
+        data_ready = state.get("data_ready", False)
+        viz_ready = state.get("viz_ready", False)
+
+        # New turn: last message is human and pipeline is idle
+        if isinstance(last, HumanMessage) and not data_ready and not viz_ready:
+            return "intent"
+        return "supervisor"
+
+    # ------------------------------------------------------------------ #
+    # helpers                                                               #
+    # ------------------------------------------------------------------ #
+    def _build_text_response(messages: list[BaseMessage]) -> Optional[str]:
+        """
+        Extracts the last tool result from data_agent messages and formats
+        it as a clean human-readable text response.
+        """
         for msg in reversed(messages):
-            if isinstance(msg, ToolMessage):
-                records = _records_from_tool_message(msg)
-                if records:
-                    return AIMessage(content=_format_data_response(records))
+            if not isinstance(msg, ToolMessage):
+                continue
+            try:
+                payload = json.loads(msg.content)
+            except (TypeError, json.JSONDecodeError):
+                continue
+
+            if isinstance(payload, dict) and "error" in payload:
+                return f"Sorry, I could not retrieve the data: {payload['error']}"
+
+            records: list[dict] = []
+            if isinstance(payload, list):
+                records = [r for r in payload if isinstance(r, dict)]
+            elif isinstance(payload, dict):
+                records = [payload]
+
+            if not records:
+                continue
+
+            return _format_records(records)
+
+        # Fallback: return the last AI message content if no tool result found
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                return msg.content
+
         return None
 
-    def _records_from_tool_message(msg: ToolMessage) -> list[dict]:
-        try:
-            payload = json.loads(msg.content)
-        except (TypeError, json.JSONDecodeError):
-            return []
-        if isinstance(payload, list):
-            return [row for row in payload if isinstance(row, dict)]
-        if isinstance(payload, dict):
-            if "error" in payload:
-                return []
-            return [payload]
-        return []
+    def _format_records(records: list[dict]) -> str:
+        """Formats a list of dicts into a readable markdown-style table."""
+        if not records:
+            return "No results found."
 
-    def _format_data_response(records: list[dict]) -> str:
-        preview = records[:20]
-        payload = {
-            "row_count": len(records),
-            "columns": list(preview[0].keys()) if preview else [],
-            "rows": preview,
-            "truncated": len(records) > len(preview),
-        }
-        return json.dumps(payload, indent=2)
+        if len(records) == 1:
+            r = records[0]
+            lines = [f"**{k}**: {v}" for k, v in r.items()]
+            return "\n".join(lines)
 
+        headers = list(records[0].keys())
+        col_widths = {h: max(len(str(h)), max(len(str(r.get(h, ""))) for r in records))
+                      for h in headers}
+
+        header_row = " | ".join(str(h).ljust(col_widths[h]) for h in headers)
+        separator  = " | ".join("-" * col_widths[h] for h in headers)
+        rows = [
+            " | ".join(str(r.get(h, "")).ljust(col_widths[h]) for h in headers)
+            for r in records
+        ]
+
+        lines = [header_row, separator] + rows
+        lines.append(f"\n{len(records)} record(s) found.")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
+    # graph assembly                                                        #
+    # ------------------------------------------------------------------ #
     builder = StateGraph(SupervisorState)
-    builder.add_node("supervisor", supervisor_node)
-    builder.add_node("direct_renderer", direct_renderer_node)
-    builder.add_node("data_agent", data_agent_node)
-    builder.add_node("viz_agent", viz_agent_node)
 
-    builder.set_entry_point("supervisor")
+    builder.add_node("intent",     intent_node)
+    builder.add_node("supervisor", supervisor_node)
+    builder.add_node("data_agent", data_agent_node)
+    builder.add_node("viz_agent",  viz_agent_node)
+
+    # Entry: classify intent on new turns, skip on subsequent routing steps
+    builder.set_conditional_entry_point(route_entry)
+
+    builder.add_edge("intent", "supervisor")
     builder.add_conditional_edges("supervisor", route_supervisor)
-    builder.add_edge("direct_renderer", "supervisor")
     builder.add_edge("data_agent", "supervisor")
-    builder.add_edge("viz_agent", "supervisor")
+    builder.add_edge("viz_agent",  "supervisor")
 
     return builder.compile(checkpointer=checkpointer)
