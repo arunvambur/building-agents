@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import DataTable from "./DataTable";
 import FileCard from "./FileCard";
+import MapCard from "./MapCard";
 
 export type Role = "user" | "agent" | "error";
 export type ContentType = "text" | "image" | "file" | "table";
@@ -27,8 +28,9 @@ interface Props {
 }
 
 export default function MessageBubble({ message, onRetry }: Props) {
-  const isUser = message.role === "user";
+  const isUser  = message.role === "user";
   const isError = message.role === "error";
+  const isMap   = !isUser && message.contentType === "file" && message.fileFormat === "map";
   const [time, setTime] = useState("");
 
   useEffect(() => {
@@ -54,6 +56,16 @@ export default function MessageBubble({ message, onRetry }: Props) {
           </div>
         )}
 
+        {/* Interactive map (iframe) */}
+        {isMap && (
+          <div className="w-full">
+            <MapCard
+              downloadUrl={message.content}
+              filename={message.filename || "map.html"}
+            />
+          </div>
+        )}
+
         {/* Tabular data */}
         {!isUser && message.contentType === "table" && message.headers && message.rows && (
           <div className="w-full">
@@ -65,8 +77,8 @@ export default function MessageBubble({ message, onRetry }: Props) {
           </div>
         )}
 
-        {/* File download — excel / pdf / ppt / csv */}
-        {!isUser && message.contentType === "file" && (
+        {/* File download — excel / pdf / ppt / csv (not map — handled above) */}
+        {!isUser && message.contentType === "file" && !isMap && (
           <div className="w-80">
             <FileCard
               downloadUrl={message.content}

@@ -62,6 +62,9 @@ dependencies = [
     # --- PowerPoint rendering ---
     "python-pptx>=1.0.0",
 
+    # --- Map rendering ---
+    "folium>=0.18.0",
+
 ]
 
 [project.scripts]

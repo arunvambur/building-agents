@@ -27,19 +27,26 @@ class RenderingTools(ToolPlugin):
             ALWAYS call this tool to produce the final output — never skip it.
             Args:
                 spec_dict: A dict matching the VisualizationSpec schema. Must include:
-                    - charts: list of chart dicts, each with type, x (field+type), y (field+type),
-                      aggregation (optional), title (optional).
-                    - output: 'image' for inline chart PNG, 'excel' for downloadable spreadsheet.
-                    - filters: optional list of filter dicts.
-                    - layout: optional 'single', 'grid', or 'dashboard'.
+                    - output: one of 'image', 'excel', 'pdf', 'ppt', 'map'.
+                    For chart outputs (image/excel/pdf/ppt):
+                      - charts: list of chart dicts, each with type, x (field+type),
+                        y (field+type), aggregation (optional), title (optional).
+                      - filters: optional list of filter dicts.
+                      - layout: optional 'single', 'grid', or 'dashboard'.
+                    For map output:
+                      - map_spec: dict with map_type ('marker'|'bubble'|'heatmap'),
+                        lat_field, lon_field, label_field, color_field (optional),
+                        size_field (optional), intensity_field (optional), title (optional).
                 data: The raw list of data records (list of dicts) from the data agent.
             Returns:
                 For 'image': a base64-encoded PNG string prefixed with 'data:image/png;base64,'.
-                For 'excel': a file path prefixed with 'file://'.
+                For 'excel'/'pdf'/'ppt'/'map': a file path prefixed with 'file://'.
             """
             try:
                 spec = VisualizationSpec(**spec_dict)
-                validate_spec(spec)
+                # Skip chart validation for map output — MapSpec has its own structure
+                if spec.output != "map":
+                    validate_spec(spec)
                 renderer = renderer_registry.get(spec.output)
                 return renderer.render(spec, data)
             except SpecValidationError as e:

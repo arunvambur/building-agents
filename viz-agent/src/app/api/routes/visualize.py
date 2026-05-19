@@ -21,6 +21,7 @@ _EXT_TO_FRIENDLY = {
     ".pdf":  ("pdf",   "cornwall_hotels_{}.pdf"),
     ".pptx": ("ppt",   "cornwall_hotels_{}.pptx"),
     ".csv":  ("csv",   "cornwall_hotels_{}.csv"),
+    ".html": ("map",   "cornwall_hotels_map_{}.html"),
 }
 
 
@@ -34,7 +35,7 @@ class VisualizeResponse(BaseModel):
     type: Literal["text", "image", "file", "table"]
     content: str
     filename: Optional[str] = None
-    file_format: Optional[str] = None      # "excel" | "pdf" | "ppt" | "csv"
+    file_format: Optional[str] = None      # "excel" | "pdf" | "ppt" | "csv" | "map"
     # Populated for type="table"
     headers: Optional[List[str]] = None
     rows: Optional[List[List[str]]] = None
@@ -65,7 +66,7 @@ def register(runtime: AgentRuntime) -> APIRouter:
                 content=raw[len(IMAGE_PREFIX):],
             )
 
-        # --- Rendered file (excel / pdf / ppt) ---
+        # --- Rendered file (excel / pdf / ppt / map / csv) ---
         if raw.startswith(FILE_PREFIX):
             return _file_response(thread_id, raw[len(FILE_PREFIX):])
 
@@ -86,7 +87,7 @@ def register(runtime: AgentRuntime) -> APIRouter:
                     row_count=payload.get("count", 0),
                 )
             except (json.JSONDecodeError, KeyError):
-                pass  # fall through to plain text
+                pass
 
         # --- Plain text ---
         return VisualizeResponse(

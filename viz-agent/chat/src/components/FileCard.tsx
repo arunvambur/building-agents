@@ -5,7 +5,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 interface Props {
   downloadUrl: string;
   filename: string;
-  fileFormat?: string;  // "excel" | "pdf" | "ppt"
+  fileFormat?: string;  // "excel" | "pdf" | "ppt" | "csv" | "map"
 }
 
 interface FileType {
@@ -17,6 +17,19 @@ interface FileType {
 
 function getFileType(filename: string, fileFormat?: string): FileType {
   const fmt = fileFormat || filename.split(".").pop()?.toLowerCase() || "";
+
+  if (fmt === "map" || filename.endsWith(".html")) {
+    return {
+      label: "Interactive map",
+      iconBg: "bg-blue-100 dark:bg-blue-900/40",
+      iconColor: "text-blue-600 dark:text-blue-400",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+      ),
+    };
+  }
 
   if (fmt === "pdf" || filename.endsWith(".pdf")) {
     return {
@@ -89,7 +102,6 @@ export default function FileCard({ downloadUrl, filename, fileFormat }: Props) {
         transition-all group no-underline
       "
     >
-      {/* File type icon */}
       <div className={`flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg ${ft.iconBg}`}>
         <span className={ft.iconColor}>{ft.icon}</span>
       </div>
@@ -99,7 +111,6 @@ export default function FileCard({ downloadUrl, filename, fileFormat }: Props) {
         <p className="text-xs text-gray-500 dark:text-gray-400">{ft.label} &middot; Click to download</p>
       </div>
 
-      {/* Download arrow */}
       <svg
         className="w-4 h-4 text-gray-400 group-hover:text-brand-500 transition-colors flex-shrink-0"
         viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"

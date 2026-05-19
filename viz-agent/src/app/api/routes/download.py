@@ -15,6 +15,7 @@ _MIME_TYPES = {
     ".pdf":  "application/pdf",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".csv":  "text/csv",
+    ".html": "text/html",
 }
 
 

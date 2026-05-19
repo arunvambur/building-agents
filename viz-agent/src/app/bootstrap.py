@@ -6,6 +6,7 @@ from core.plugin.registry import PluginRegistry
 from core.plugin.runtime import AgentRuntime
 from core.renderer.excel.excel import ExcelRenderer
 from core.renderer.image.image import ImageRenderer
+from core.renderer.map.map import MapRenderer
 from core.renderer.pdf.pdf import PDFRenderer
 from core.renderer.ppt.ppt import PPTRenderer
 from core.renderer.registry import RendererRegistry
@@ -26,8 +27,7 @@ def build_runtime() -> AgentRuntime:
     renderer_registry.register(ExcelRenderer())
     renderer_registry.register(PDFRenderer())
     renderer_registry.register(PPTRenderer())
-    # TableauRenderer is not registered until fully implemented.
-    # See core/renderer/tableau/tableau.py for requirements.
+    renderer_registry.register(MapRenderer())
 
     # --- Plugin registry ---
     registry = PluginRegistry()
@@ -80,5 +80,3 @@ def build_runtime() -> AgentRuntime:
         checkpointer=checkpointer,
         supervisor=supervisor_graph,
     )
-
-
