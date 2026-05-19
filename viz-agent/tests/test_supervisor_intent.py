@@ -35,9 +35,8 @@ class TestFastClassifier:
     def test_pdf_only_is_viz(self):
         assert classify_intent_fast("create a PDF") == IntentType.viz
 
-    def test_histogram_with_show_is_both(self):
-        # "show" matches data pattern, "histogram" matches viz → both
-        assert classify_intent_fast("show a histogram") == IntentType.both
+    def test_histogram_with_show_is_viz(self):
+        assert classify_intent_fast("show a histogram") == IntentType.viz
 
     def test_visualize_alone_is_viz(self):
         # "visualize" matches viz; "data" alone is not in the data keyword list
@@ -66,15 +65,19 @@ class TestFastClassifier:
     def test_availability_query_is_data(self):
         assert classify_intent_fast("which rooms are available?") == IntentType.data
 
+    def test_download_csv_is_data(self):
+        assert classify_intent_fast("Download all hotel room offers as CSV.") == IntentType.data
+
+    def test_comma_separated_export_is_data(self):
+        assert classify_intent_fast("export all hotel room offers as comma-separated data") == IntentType.data
+
     # --- both (viz + data keywords together) ---
 
-    def test_show_bar_chart_is_both(self):
-        # "show" = data keyword, "bar chart" = viz keyword
-        assert classify_intent_fast("show me a bar chart of hotel ratings") == IntentType.both
+    def test_show_bar_chart_is_viz(self):
+        assert classify_intent_fast("show me a bar chart of hotel ratings") == IntentType.viz
 
-    def test_excel_report_with_hotels_is_both(self):
-        # "hotels" = data keyword, "Excel" = viz keyword
-        assert classify_intent_fast("generate an Excel report of all hotels") == IntentType.both
+    def test_excel_report_with_hotels_is_viz(self):
+        assert classify_intent_fast("generate an Excel report of all hotels") == IntentType.viz
 
     def test_chart_and_list_is_both(self):
         assert classify_intent_fast("list hotels and show a bar chart") == IntentType.both
@@ -90,9 +93,8 @@ class TestFastClassifier:
         # actual: "rooms" is in data pattern but "room" alone is not
         assert classify_intent_fast("pie chart of room distribution") == IntentType.viz
 
-    def test_pie_chart_with_rooms_keyword_is_both(self):
-        # "rooms" (plural) IS in the data pattern
-        assert classify_intent_fast("pie chart of available rooms") == IntentType.both
+    def test_pie_chart_with_rooms_keyword_is_viz(self):
+        assert classify_intent_fast("pie chart of available rooms") == IntentType.viz
 
     # --- ambiguous ---
 

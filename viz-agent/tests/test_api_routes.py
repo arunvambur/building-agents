@@ -1,12 +1,13 @@
 """
 Tests for app/api/routes — /health, /visualize, /download endpoints.
 """
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 
 @pytest.fixture(autouse=True)
@@ -124,6 +125,39 @@ def test_visualize_returns_image_response():
     assert body["session_id"]
 
 
+def test_visualize_image_response_includes_table_for_both_intent():
+    rows = [
+        {"hotel_name": "Seaview Hotel", "town": "Newquay", "monthly_revenue": 142000},
+        {"hotel_name": "Harbour Inn", "town": "Falmouth", "monthly_revenue": 68000},
+    ]
+    runtime = MagicMock()
+    runtime.ainvoke = AsyncMock(
+        return_value={
+            "intent": "both",
+            "messages": [
+                ToolMessage(
+                    content=json.dumps(rows),
+                    name="list_all_hotels_with_offers",
+                    tool_call_id="data-1",
+                ),
+                AIMessage(content="data:image/png;base64,iVBORw0KGgo="),
+            ],
+        }
+    )
+    client = TestClient(_make_visualize_app(runtime))
+    resp = client.post("/visualize", json={"message": "list hotels and show a chart"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "image"
+    assert body["content"] == "iVBORw0KGgo="
+    assert body["headers"] == ["hotel_name", "town", "monthly_revenue"]
+    assert body["rows"] == [
+        ["Seaview Hotel", "Newquay", "142000"],
+        ["Harbour Inn", "Falmouth", "68000"],
+    ]
+    assert body["row_count"] == 2
+
+
 def test_visualize_returns_text_response():
     client = TestClient(_make_visualize_app(_mock_runtime("I cannot help with that.")))
     resp = client.post("/visualize", json={"message": "hello"})
@@ -131,6 +165,84 @@ def test_visualize_returns_text_response():
     body = resp.json()
     assert body["type"] == "text"
     assert body["content"] == "I cannot help with that."
+
+
+def test_visualize_returns_table_response_for_table_prefix():
+    payload = {
+        "headers": ["hotel_name", "town", "rating"],
+        "rows": [["Seaview Hotel", "Newquay", "4.5"]],
+        "count": 1,
+    }
+    client = TestClient(_make_visualize_app(_mock_runtime(f"table://{json.dumps(payload)}")))
+    resp = client.post("/visualize", json={"message": "list hotels"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "table"
+    assert body["headers"] == ["hotel_name", "town", "rating"]
+    assert body["rows"] == [["Seaview Hotel", "Newquay", "4.5"]]
+    assert body["row_count"] == 1
+
+
+def test_visualize_returns_table_response_for_raw_record_list_json():
+    records = [
+        {"hotel_name": "Seaview Hotel", "town": "Newquay", "rating": 4.5},
+        {"hotel_name": "Harbour Inn", "town": "Falmouth", "rating": 4.2},
+    ]
+    client = TestClient(_make_visualize_app(_mock_runtime(json.dumps(records))))
+    resp = client.post("/visualize", json={"message": "list hotels"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "table"
+    assert body["headers"] == ["hotel_name", "town", "rating"]
+    assert body["rows"] == [
+        ["Seaview Hotel", "Newquay", "4.5"],
+        ["Harbour Inn", "Falmouth", "4.2"],
+    ]
+    assert body["row_count"] == 2
+
+
+def test_visualize_returns_table_response_for_raw_columns_data_json():
+    payload = {
+        "row_count": 2,
+        "columns": ["hotel_name", "town", "rating"],
+        "data": [
+            {"hotel_name": "Seaview Hotel", "town": "Newquay", "rating": 4.5},
+            {"hotel_name": "Harbour Inn", "town": "Falmouth", "rating": 4.2},
+        ],
+    }
+    client = TestClient(_make_visualize_app(_mock_runtime(json.dumps(payload))))
+    resp = client.post("/visualize", json={"message": "list hotels"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "table"
+    assert body["headers"] == ["hotel_name", "town", "rating"]
+    assert body["rows"] == [
+        ["Seaview Hotel", "Newquay", "4.5"],
+        ["Harbour Inn", "Falmouth", "4.2"],
+    ]
+    assert body["row_count"] == 2
+
+
+def test_visualize_returns_table_response_for_raw_columns_rows_json():
+    payload = {
+        "row_count": 2,
+        "columns": ["hotel_name", "town", "rating"],
+        "rows": [
+            ["Seaview Hotel", "Newquay", 4.5],
+            ["Harbour Inn", "Falmouth", 4.2],
+        ],
+    }
+    client = TestClient(_make_visualize_app(_mock_runtime(json.dumps(payload))))
+    resp = client.post("/visualize", json={"message": "list hotels"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "table"
+    assert body["headers"] == ["hotel_name", "town", "rating"]
+    assert body["rows"] == [
+        ["Seaview Hotel", "Newquay", "4.5"],
+        ["Harbour Inn", "Falmouth", "4.2"],
+    ]
+    assert body["row_count"] == 2
 
 
 def test_visualize_returns_file_response_for_excel(tmp_path):
@@ -145,6 +257,27 @@ def test_visualize_returns_file_response_for_excel(tmp_path):
     assert body["file_format"] == "excel"
     assert body["content"].startswith("/download/")
     assert body["filename"].endswith(".xlsx")
+
+
+def test_visualize_csv_prompt_short_circuits_to_file_response():
+    runtime = MagicMock()
+    runtime.ainvoke = AsyncMock(return_value={"messages": [AIMessage(content="should not run")]})
+    rows = [
+        {"hotel_name": "Seaview Hotel", "town": "Newquay", "available_rooms": 5},
+        {"hotel_name": "Harbour Inn", "town": "Falmouth", "available_rooms": 2},
+    ]
+
+    with patch("app.api.routes.visualize.list_all_hotels_with_offers.invoke", return_value=rows):
+        client = TestClient(_make_visualize_app(runtime))
+        resp = client.post("/visualize", json={"message": "Download all hotel room offers as CSV."})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["type"] == "file"
+    assert body["file_format"] == "csv"
+    assert body["content"].startswith("/download/")
+    assert body["filename"].endswith(".csv")
+    runtime.ainvoke.assert_not_called()
 
 
 def test_visualize_preserves_session_id():
