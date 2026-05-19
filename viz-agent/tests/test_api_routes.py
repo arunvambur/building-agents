@@ -267,7 +267,10 @@ def test_visualize_csv_prompt_short_circuits_to_file_response():
         {"hotel_name": "Harbour Inn", "town": "Falmouth", "available_rooms": 2},
     ]
 
-    with patch("app.api.routes.visualize.list_all_hotels_with_offers.invoke", return_value=rows):
+    # Patch the tool at the module level where it is imported
+    mock_tool = MagicMock()
+    mock_tool.invoke = MagicMock(return_value=rows)
+    with patch("app.api.routes.visualize.list_all_hotels_with_offers", mock_tool):
         client = TestClient(_make_visualize_app(runtime))
         resp = client.post("/visualize", json={"message": "Download all hotel room offers as CSV."})
 

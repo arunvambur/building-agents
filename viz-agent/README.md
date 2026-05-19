@@ -332,7 +332,7 @@ The data agent has access to the following SQLite tools against `cornwall_hotels
 python -m pytest tests/ -v
 ```
 
-Current test coverage: **99 tests** across 10 test files.
+Current test coverage: **321 tests** across 19 test files.
 
 | Test file | Coverage |
 |-----------|---------|

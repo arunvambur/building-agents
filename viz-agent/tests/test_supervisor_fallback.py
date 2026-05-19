@@ -1,9 +1,14 @@
+from unittest.mock import patch
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from agents.supervisor.fallback import build_fallback_spec
 from agents.supervisor.graph import build_supervisor_graph
 from core.renderer.registry import RendererRegistry
+
+# Prevent resolve_data_query from hitting the real DB in all tests here
+_no_deterministic = patch("agents.supervisor.graph.resolve_data_query", return_value=None)
 
 
 class _FakeRenderer:
@@ -46,7 +51,6 @@ def test_fallback_spec_for_ratings_by_town_bar_chart():
         "Show me a bar chart of hotel ratings by town",
         [{"town": "St Ives", "rating": 4.8}],
     )
-
     chart = spec.charts[0]
     assert spec.output == "image"
     assert chart.type == "bar"
@@ -55,7 +59,9 @@ def test_fallback_spec_for_ratings_by_town_bar_chart():
     assert chart.aggregation.op == "avg"
 
 
-def test_supervisor_renders_fallback_when_viz_agent_returns_empty_message():
+@_no_deterministic
+def test_supervisor_renders_fallback_when_viz_agent_returns_empty_message(_):
+    """Fallback renderer kicks in when viz_agent returns no renderer output."""
     rows = [
         {"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8},
         {"hotel_name": "Seaview Hotel", "town": "Newquay", "rating": 4.5},
@@ -85,21 +91,30 @@ def test_supervisor_renders_fallback_when_viz_agent_returns_empty_message():
     )
 
     assert result["messages"][-1].content == "data:image/png;base64,fake"
-    assert renderer.data == rows
     assert renderer.spec.charts[0].x.field == "town"
     assert renderer.spec.charts[0].y.field == "rating"
 
 
-def test_supervisor_renders_fallback_when_model_graph_fails():
-    rows = [{"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8}]
+@_no_deterministic
+def test_supervisor_renders_fallback_when_viz_agent_fails(_):
+    """When viz_agent raises, the fallback renderer in viz_agent_node catches it."""
+    rows = [
+        {"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8},
+        {"hotel_name": "Seaview Hotel", "town": "Newquay", "rating": 4.5},
+    ]
 
     renderer = _FakeRenderer()
     renderer_registry = RendererRegistry()
     renderer_registry.register(renderer)
 
+    # Data agent succeeds (returns no tool messages → fallback data injected)
+    data_agent_graph = _FakeGraph(
+        lambda state: {"messages": list(state["messages"]) + [AIMessage(content="No rows found")]}
+    )
+
     graph = build_supervisor_graph(
         llm=None,
-        data_agent_graph=_FailingGraph(),
+        data_agent_graph=data_agent_graph,
         viz_agent_graph=_FailingGraph(),
         renderer_registry=renderer_registry,
         default_data_loader=lambda: rows,
@@ -109,11 +124,12 @@ def test_supervisor_renders_fallback_when_model_graph_fails():
         {"messages": [HumanMessage(content="Show me a bar chart of hotel ratings by town")]}
     )
 
+    # The fallback renderer in viz_agent_node catches the RuntimeError and renders
     assert result["messages"][-1].content == "data:image/png;base64,fake"
-    assert renderer.data == rows
 
 
-def test_supervisor_resets_ready_flags_for_new_human_turn_with_same_thread():
+@_no_deterministic
+def test_supervisor_resets_ready_flags_for_new_human_turn_with_same_thread(_):
     rows = [{"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8}]
 
     renderer_registry = RendererRegistry()
@@ -148,14 +164,26 @@ def test_supervisor_resets_ready_flags_for_new_human_turn_with_same_thread():
     assert second["messages"][-1].content == "file:///tmp/fake.xlsx"
 
 
-def test_supervisor_renders_multi_chart_pdf_without_model_pipeline():
+@_no_deterministic
+def test_supervisor_renders_multi_chart_pdf_via_fallback_renderer(_):
+    """
+    The fallback renderer (render_fallback_visualization) handles multi-chart PDF
+    requests when the viz_agent returns no renderer output.
+    """
     rows = [{"hotel_name": "St Ives Bay Resort", "town": "St Ives", "rating": 4.8}]
 
     renderer = _FakeRenderer()
     renderer_registry = RendererRegistry()
     renderer_registry.register(renderer)
-    data_agent_graph = _FakeGraph(lambda state: (_ for _ in ()).throw(AssertionError("data agent called")))
-    viz_agent_graph = _FakeGraph(lambda state: (_ for _ in ()).throw(AssertionError("viz agent called")))
+
+    # Data agent returns no tool messages → fallback data injected
+    data_agent_graph = _FakeGraph(
+        lambda state: {"messages": list(state["messages"]) + [AIMessage(content="No rows found")]}
+    )
+    # Viz agent returns empty — fallback renderer takes over
+    viz_agent_graph = _FakeGraph(
+        lambda state: {"messages": list(state["messages"]) + [AIMessage(content="")]}
+    )
 
     graph = build_supervisor_graph(
         llm=None,

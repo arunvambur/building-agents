@@ -1,11 +1,13 @@
-import logging
 import json
+import logging
 from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 
+from agents.supervisor.data_fallback import resolve_data_query
+from agents.supervisor.fallback import render_fallback_visualization
 from agents.supervisor.formatting import (
     extract_records_from_tool_messages,
     format_table,
@@ -14,9 +16,7 @@ from agents.supervisor.formatting import (
     wants_csv,
     write_csv,
 )
-from agents.supervisor.data_fallback import resolve_data_query
-from agents.supervisor.fallback import render_fallback_visualization
-from agents.supervisor.intent import IntentType, build_intent_classifier
+from agents.supervisor.intent import IntentType, build_intent_classifier, classify_intent_fast
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,12 @@ def build_supervisor_graph(
     default_data_loader: Optional[Any] = None,
 ) -> Any:
 
-    classify_intent = build_intent_classifier(llm)
+    # llm may be None in tests — fall back to keyword-only classification
+    if llm is not None:
+        classify_intent = build_intent_classifier(llm)
+    else:
+        def classify_intent(text: str) -> IntentType:
+            return classify_intent_fast(text) or IntentType.both
 
     # ------------------------------------------------------------------ #
     # intent_node                                                           #
@@ -119,16 +124,12 @@ def build_supervisor_graph(
                              msg.name, msg.content[:120].replace("\n", " "))
 
         if intent == IntentType.data:
-            # Detect CSV intent from the original user message in state
             csv_requested = wants_csv(user_text)
-
-            # Extract records directly from ToolMessages — bypass the LLM's
-            # final AIMessage which may reformat the data as JSON text.
             records = extract_records_from_tool_messages(agent_messages)
 
             if records is not None:
                 if isinstance(records, str):
-                    formatted = records                          # error string
+                    formatted = records
                 elif csv_requested:
                     formatted = write_csv(records)
                     logger.info("[data_agent] CSV written — %d records", len(records))
@@ -136,20 +137,30 @@ def build_supervisor_graph(
                     formatted = format_table(records)
                     logger.info("[data_agent] table formatted — %d records", len(records))
 
-                # Return only the formatted AIMessage — prevents the LLM's
-                # JSON summary from leaking through as the final response.
-                return {
-                    "messages": [AIMessage(content=formatted)],
-                    "data_ready": True,
-                }
+                return {"messages": [AIMessage(content=formatted)], "data_ready": True}
 
-            # No tool results — fall back to the agent's last AIMessage
             fallback = last_ai_content(agent_messages)
             if fallback:
-                return {
-                    "messages": [AIMessage(content=fallback)],
-                    "data_ready": True,
-                }
+                return {"messages": [AIMessage(content=fallback)], "data_ready": True}
+
+        # For viz/both: inject fallback data if no tool results found
+        has_tool_data = any(isinstance(m, ToolMessage) for m in agent_messages)
+        if not has_tool_data and default_data_loader:
+            logger.warning("[data_agent] no tool results found — injecting fallback data")
+            data = default_data_loader()
+            tool_call_id = "fallback-list-all-hotels"
+            agent_messages = list(agent_messages) + [
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "list_all_hotels_with_offers", "args": {}, "id": tool_call_id}],
+                ),
+                ToolMessage(
+                    content=json.dumps(data),
+                    name="list_all_hotels_with_offers",
+                    tool_call_id=tool_call_id,
+                ),
+            ]
+            logger.info("[data_agent] fallback data injected — %d records", len(data))
 
         return {"messages": agent_messages, "data_ready": True}
 
@@ -172,7 +183,7 @@ def build_supervisor_graph(
             rendered = None
 
         if rendered:
-            logger.info("[viz_agent] deterministic renderer output detected — length: %d", len(rendered))
+            logger.info("[viz_agent] deterministic renderer output — length: %d", len(rendered))
             return {"messages": [AIMessage(content=rendered)], "viz_ready": True}
 
         result = viz_agent_graph.invoke({"messages": state["messages"]})
@@ -198,8 +209,6 @@ def build_supervisor_graph(
             final_messages = list(all_messages) + [AIMessage(content=renderer_output)]
         else:
             logger.warning("[viz_agent] no renderer output found — returning last message as-is")
-            logger.debug("[viz_agent] last content: %r",
-                         getattr(all_messages[-1], "content", "")[:200] if all_messages else "")
             final_messages = list(all_messages)
 
         return {"messages": final_messages, "viz_ready": True}

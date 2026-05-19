@@ -38,7 +38,7 @@ class VisualizeResponse(BaseModel):
     content: str
     filename: Optional[str] = None
     file_format: Optional[str] = None      # "excel" | "pdf" | "ppt" | "csv" | "map"
-    # Populated for type="table"
+    # Populated for type="table" and optionally for type="image" (both intent)
     headers: Optional[List[str]] = None
     rows: Optional[List[List[str]]] = None
     row_count: Optional[int] = None
@@ -51,8 +51,8 @@ def register(runtime: AgentRuntime) -> APIRouter:
     async def visualize(request: VisualizeRequest):
         thread_id = request.session_id or str(uuid.uuid4())
 
-        # CSV downloads are data exports, not chart/file render jobs. Handle
-        # them before the agent graph so keyword routing cannot render a chart.
+        # CSV downloads are data exports — handle before the agent graph so
+        # keyword routing cannot accidentally render a chart instead.
         if wants_csv(request.message.lower()):
             records = list_all_hotels_with_offers.invoke({})
             raw_csv = write_csv(records)
@@ -82,7 +82,7 @@ def register(runtime: AgentRuntime) -> APIRouter:
                 row_count=table["row_count"] if table else None,
             )
 
-        # --- Rendered file (excel / pdf / ppt / map / csv) ---
+        # --- Rendered file (excel / pdf / ppt / map) ---
         if raw.startswith(FILE_PREFIX):
             return _file_response(thread_id, raw[len(FILE_PREFIX):])
 
@@ -90,9 +90,9 @@ def register(runtime: AgentRuntime) -> APIRouter:
         if raw.startswith(CSV_PREFIX):
             return _file_response(thread_id, raw[len(CSV_PREFIX):])
 
-        # --- Tabular data (rendered as table in UI) ---
+        # --- Tabular data with table:// prefix ---
         if raw.startswith(TABLE_PREFIX):
- 			try:
+            try:
                 payload: Dict[str, Any] = json.loads(raw[len(TABLE_PREFIX):])
                 return VisualizeResponse(
                     session_id=thread_id,
@@ -104,22 +104,8 @@ def register(runtime: AgentRuntime) -> APIRouter:
                 )
             except (json.JSONDecodeError, KeyError):
                 pass
- 			try:
-                payload: Dict[str, Any] = json.loads(raw[len(TABLE_PREFIX):])
-                return VisualizeResponse(
-                    session_id=thread_id,
-                    type="table",
-                    content="",
-                    headers=payload.get("headers", []),
-                    rows=payload.get("rows", []),
-                    row_count=payload.get("count", 0),
-                )
-            except (json.JSONDecodeError, KeyError):
-                pass
-        # --- Raw JSON tabular data ---
-        # Some LLMs summarize tool output as JSON instead of preserving the
-        # internal table:// marker. Normalize those shapes here so the frontend
-        # still receives type="table".
+
+        # --- Raw JSON tabular data (LLM summarised as JSON) ---
         table = _parse_table_payload(raw)
         if table:
             return _table_response(thread_id, table)
@@ -146,13 +132,12 @@ def _table_response(thread_id: str, table: Dict[str, Any]) -> VisualizeResponse:
 
 
 def _table_from_result(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """For 'both' intent responses, extract the data table alongside the image."""
     if result.get("intent") != "both":
         return None
-
     records = extract_records_from_tool_messages(result.get("messages", []))
     if not isinstance(records, list) or not records:
         return None
-
     return _records_to_table(records)
 
 
@@ -162,7 +147,6 @@ def _parse_table_payload(content: str) -> Optional[Dict[str, Any]]:
         payload = json.loads(stripped)
     except (TypeError, json.JSONDecodeError):
         return None
-
     return _normalize_table_payload(payload)
 
 
@@ -170,7 +154,6 @@ def _strip_json_fence(content: str) -> str:
     stripped = content.strip()
     if not stripped.startswith("```"):
         return stripped
-
     lines = stripped.splitlines()
     if len(lines) < 2:
         return stripped
@@ -199,8 +182,7 @@ def _normalize_table_payload(payload: Any) -> Optional[Dict[str, Any]]:
             row_count=payload.get("count", payload.get("row_count")),
         )
 
-    # LLM/table summary shape seen in the UI:
-    # {"row_count": n, "columns": [...], "data": [{...}, ...]}
+    # LLM summary shape: {"row_count": n, "columns": [...], "data": [{...}]}
     headers = payload.get("columns") or payload.get("headers")
     data = (
         payload.get("data")
@@ -211,8 +193,7 @@ def _normalize_table_payload(payload: Any) -> Optional[Dict[str, Any]]:
     if isinstance(headers, list) and isinstance(data, list):
         return _rows_to_table(headers=headers, rows=data, row_count=payload.get("row_count"))
 
-    # Alternate shape used by some tests/summaries:
-    # {"row_count": n, "rows": [{...}, ...]}
+    # Alternate shape: {"row_count": n, "rows": [{...}]}
     rows = payload.get("rows")
     if isinstance(rows, list) and rows and all(isinstance(row, dict) for row in rows):
         return _rows_to_table(
@@ -235,20 +216,17 @@ def _rows_to_table(
     rows: List[Any],
     row_count: Any = None,
 ) -> Optional[Dict[str, Any]]:
-    normalized_headers = [str(header) for header in headers]
+    normalized_headers = [str(h) for h in headers]
     normalized_rows: List[List[str]] = []
-
     for row in rows:
         if isinstance(row, dict):
-            normalized_rows.append([str(row.get(header, "")) for header in normalized_headers])
+            normalized_rows.append([str(row.get(h, "")) for h in normalized_headers])
         elif isinstance(row, list):
             normalized_rows.append([str(cell) for cell in row])
         else:
             return None
-
     if not normalized_headers:
         return None
-
     count = row_count if isinstance(row_count, int) else len(normalized_rows)
     return {"headers": normalized_headers, "rows": normalized_rows, "row_count": count}
 

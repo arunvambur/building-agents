@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Use the Next.js API proxy — same base as api.ts and FileCard.tsx.
+// This ensures map iframes and full-screen links work correctly behind
+// any reverse proxy or in production without hardcoding the backend URL.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 interface Props {
   downloadUrl: string;   // /download/<file_id>
